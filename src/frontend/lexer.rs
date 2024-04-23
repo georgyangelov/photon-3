@@ -1,6 +1,7 @@
 use std::rc::Rc;
-use crate::parser::location::{Location, Position};
-use crate::parser::TokenValue::*;
+use crate::frontend::failable_iterator::FailableIterator;
+use crate::frontend::location::{Location, Position};
+use crate::frontend::TokenValue::*;
 
 #[derive(Debug)]
 pub struct Token {
@@ -11,7 +12,7 @@ pub struct Token {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum TokenValue {
-    NewLine,
+    EOF, NewLine,
     OpenParen, CloseParen, OpenBrace, CloseBrace, OpenBracket, CloseBracket,
     Comma, Dot, At, Colon,
     Val, Recursive,
@@ -30,10 +31,10 @@ pub enum LexerError {
 pub struct Lexer<I: Iterator<Item = char>> {
     chars: I,
 
-    file: Rc<str>,
+    pub file: Rc<str>,
 
     c: char,
-    position: Position,
+    pub position: Position,
 
     next_c: char,
     next_position: Position,
@@ -51,10 +52,10 @@ impl <I: Iterator<Item = char>> Lexer<I> {
 
             file: Rc::from(file),
 
-            c: '\0',
+            c: EOF,
             position: Position { line: 0, column: -1 },
 
-            next_c: '\0',
+            next_c: EOF,
             next_position: Position { line: 0, column: 0 },
 
             at_start: true,
@@ -62,7 +63,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         }
     }
 
-    pub fn next(&mut self) -> Result<Option<Token>, LexerError> {
+    pub fn next(&mut self) -> Result<Token, LexerError> {
         if self.at_start {
             self.init_read();
         }
@@ -73,7 +74,11 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         self.had_newline = false;
 
         if self.c == EOF {
-            return Ok(None)
+            return Ok(Token {
+                value: TokenValue::EOF,
+                location: Location { file: self.file.clone(), from: self.position, to: self.position },
+                whitespace_before: had_whitespace
+            })
         }
 
         match (self.c, self.next_c) {
@@ -121,7 +126,11 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         }
     }
 
-    fn read_string(&mut self, had_whitespace: bool) -> Result<Option<Token>, LexerError> {
+    pub fn has_next(&self) -> bool {
+        !self.at_start && self.c == EOF
+    }
+
+    fn read_string(&mut self, had_whitespace: bool) -> Result<Token, LexerError> {
         let mut string = String::new();
         let from = self.position;
 
@@ -148,14 +157,14 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             }
         }
 
-        Ok(Some(Token {
+        Ok(Token {
             value: StringLiteral(string.into()),
             location: Location { file: self.file.clone(), from, to: self.next_position },
             whitespace_before: had_whitespace
-        }))
+        })
     }
 
-    fn read_number(&mut self, had_whitespace: bool) -> Result<Option<Token>, LexerError> {
+    fn read_number(&mut self, had_whitespace: bool) -> Result<Token, LexerError> {
         let from = self.position;
         let mut string = String::new();
         let mut is_decimal = false;
@@ -173,14 +182,14 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             self.advance();
         }
 
-        Ok(Some(Token {
+        Ok(Token {
             value: if is_decimal { DecimalLiteral(string.into()) } else { IntLiteral(string.into()) },
             location: Location { file: self.file.clone(), from, to: self.next_position },
             whitespace_before: had_whitespace
-        }))
+        })
     }
 
-    fn read_atom(&mut self, had_whitespace: bool) -> Result<Option<Token>, LexerError> {
+    fn read_atom(&mut self, had_whitespace: bool) -> Result<Token, LexerError> {
         let from = self.position;
         let mut string = String::new();
 
@@ -208,31 +217,31 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             _ => Name(string.into())
         };
 
-        Ok(Some(Token {
+        Ok(Token {
             value,
             location: Location { file: self.file.clone(), from, to: self.next_position },
             whitespace_before: had_whitespace
-        }))
+        })
     }
 
-    fn one_char_token(&self, value: TokenValue, had_whitespace: bool) -> Result<Option<Token>, LexerError> {
-        Ok(Some(Token {
+    fn one_char_token(&self, value: TokenValue, had_whitespace: bool) -> Result<Token, LexerError> {
+        Ok(Token {
             value,
             location: Location { file: self.file.clone(), from: self.position, to: self.next_position },
             whitespace_before: had_whitespace
-        }))
+        })
     }
 
-    fn two_char_token(&mut self, value: TokenValue, had_whitespace: bool) -> Result<Option<Token>, LexerError> {
+    fn two_char_token(&mut self, value: TokenValue, had_whitespace: bool) -> Result<Token, LexerError> {
         let from = self.position;
 
         self.advance();
 
-        Ok(Some(Token {
+        Ok(Token {
             value,
             location: Location { file: self.file.clone(), from, to: self.next_position },
             whitespace_before: had_whitespace
-        }))
+        })
     }
 
     fn skip_whitespace_and_comments(&mut self) -> bool {
@@ -285,9 +294,15 @@ impl <I: Iterator<Item = char>> Lexer<I> {
                 self.next_c = c;
 
                 if c == '\n' {
-                    self.next_position = Position { line: self.next_position.line + 1, column: 0 }
+                    self.next_position = Position {
+                        line: self.next_position.line + 1,
+                        column: 0
+                    }
                 } else {
-                    self.next_position = Position { line: self.next_position.line, column: self.next_position.column + 1 }
+                    self.next_position = Position {
+                        line: self.next_position.line,
+                        column: self.next_position.column + 1
+                    }
                 }
             }
         }

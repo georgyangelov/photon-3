@@ -14,7 +14,7 @@ pub struct Position {
 }
 
 impl Location {
-    pub fn extend(&self, pos: Position) -> Self {
-        Location { file: self.file.clone(), from: self.from, to: pos }
+    pub fn extend(&self, loc: &Location) -> Self {
+        // Location { file: self.file.clone(), from: self.from, to: pos }
     }
 }

@@ -1,10 +1,10 @@
-use crate::parser::{Lexer, TokenValue};
-use crate::parser::TokenValue::*;
+use crate::frontend::{Lexer, TokenValue};
+use crate::frontend::TokenValue::*;
 
 #[test]
 fn lexes() {
-    assert_eq!(lex("val a = 42"), vec![
-        Val, Name("a".into()), Equal, IntLiteral("42".into())
+    assert_eq!(lex("val a = 42.3"), vec![
+        Val, Name("a".into()), Equal, DecimalLiteral("42.3".into())
     ]);
 }
 

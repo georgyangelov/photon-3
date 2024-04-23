@@ -1,4 +1,4 @@
-mod parser;
+mod frontend;
 mod tests;
 
 fn main() {
