@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use crate::frontend::failable_iterator::FailableIterator;
 use crate::frontend::location::{Location, Position};
 use crate::frontend::TokenValue::*;
 

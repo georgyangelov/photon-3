@@ -6,6 +6,7 @@ pub struct Pattern {
     pub location: Location
 }
 
+#[derive(Debug)]
 pub enum PatternValue {
     SpecificValue(AST),
     Binding(Box<str>),
@@ -17,10 +18,11 @@ pub enum PatternValue {
     },
     FunctionType {
         params: Box<[PatternParam]>,
-        return_type: Pattern
+        return_type: Box<Pattern>
     }
 }
 
+#[derive(Debug)]
 pub struct PatternParam {
     pub name: Box<str>,
     pub typ: Pattern

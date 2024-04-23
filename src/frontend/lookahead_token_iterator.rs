@@ -29,15 +29,13 @@ impl <I: Iterator<Item = char>> LookaheadTokenIterator<I> {
     }
 
     pub fn peek(&mut self) -> Result<&Token, LexerError> {
-        match self.buffer.front() {
-            Some(token) => Ok(token),
-            None => {
-                let token = self.lexer.next()?;
-                self.buffer.push_back(token);
+        if self.buffer.len() == 0 {
+            let token = self.lexer.next()?;
 
-                Ok(self.buffer.front().unwrap())
-            }
+            self.buffer.push_back(token);
         }
+
+        Ok(self.buffer.front().unwrap())
     }
 }
 
@@ -46,17 +44,15 @@ struct LookaheadIteratorIterator<'a, I: Iterator<Item = char>> {
     i: usize
 }
 
-impl <I: Iterator<Item = char>> LookaheadIteratorIterator<I> {
+impl <'a, I: Iterator<Item = char>> LookaheadIteratorIterator<'a, I> {
     fn next(&mut self) -> Result<&Token, LexerError> {
-        let token = match self.lookahead.buffer.get(self.i)? {
-            Some(token) => token,
-            None => {
-                let token = self.lookahead.lexer.next()?;
-                self.lookahead.buffer.push_back(token);
+        if self.lookahead.buffer.len() < self.i {
+            let token = self.lookahead.lexer.next()?;
 
-                self.lookahead.buffer.get(self.i).unwrap()
-            }
-        };
+            self.lookahead.buffer.push_back(token);
+        }
+
+        let token = self.lookahead.buffer.get(self.i).unwrap();
 
         self.i += 1;
 

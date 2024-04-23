@@ -15,6 +15,11 @@ pub struct Position {
 
 impl Location {
     pub fn extend(&self, loc: &Location) -> Self {
-        // Location { file: self.file.clone(), from: self.from, to: pos }
+        Location {
+            file: self.file.clone(),
+            // TODO: Do we need to make this min of the two, and the other the max of the two?
+            from: self.from,
+            to: loc.to
+        }
     }
 }

@@ -12,7 +12,12 @@ fn lex(code: &str) -> Vec<TokenValue> {
     let mut lexer = Lexer::new("<test>", code.chars());
     let mut tokens = Vec::new();
 
-    while let Some(token) = lexer.next().expect("Error during lexing") {
+    loop {
+        let token = lexer.next().expect("Error during lexing");
+        if token.value == EOF {
+            break;
+        }
+
         tokens.push(token.value);
     }
 
