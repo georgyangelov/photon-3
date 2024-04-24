@@ -10,4 +10,6 @@ edition = "2021"
 
 [dependencies]
 runtime = { path = "./runtime" }
-wasmer = "4.2.8"
+wasmtime = "19.0.2"
+binaryen-sys = "0.13.0"
+#binaryen_capi-sys = "0.117.0"

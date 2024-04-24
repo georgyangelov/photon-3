@@ -1,6 +1,7 @@
 #!/bin/sh
 
-TARGET=wasm32-wasi
+#TARGET=wasm32-wasi
+TARGET=wasm32-unknown-unknown
 
 cd "$(dirname "$0")/.."
 
