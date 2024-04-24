@@ -4,7 +4,7 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::ptr::slice_from_raw_parts_mut;
 use binaryen_sys::*;
-use wasmtime::{Engine, Instance, Memory, Module, Store};
+use wasmtime::{Engine, Instance, Linker, Memory, Module, Store};
 use runtime::Position;
 
 mod frontend;
@@ -13,15 +13,15 @@ mod tests;
 fn main() {
     let engine = Engine::default();
 
-    let module = Module::from_file(&engine, "target/wasm32-unknown-unknown/release/runtime.wasm")
+    let runtime_module = Module::from_file(&engine, "target/wasm32-unknown-unknown/release/runtime.wasm")
         .expect("Could not load wasm file into module");
 
     let mut store = Store::new(&engine, ());
 
-    let imports = [];
+    // let imports = [];
 
-    let instance = Instance::new(&mut store, &module, &imports)
-        .expect("Could not create instance of the module");
+    // let instance = Instance::new(&mut store, &module, &imports)
+    //     .expect("Could not create instance of the module");
 
     // let function =
     //     instance.get_typed_func::<(i64, i64), i64>(&mut store, "add")
@@ -88,8 +88,16 @@ fn main() {
     let wasm_binary = build_wasm_module();
 
     let built_module = Module::new(&engine, wasm_binary).expect("Could not load generated wasm binary");
-    let built_module_instance = Instance::new(&mut store, &built_module, &imports)
-        .expect("Could not create instance of the module");
+
+    let mut linker = Linker::new(&engine);
+
+    let runtime_instance = linker.instantiate(&mut store, &runtime_module).expect("Could not instantiate runtime module");
+    linker.instance(&mut store, "runtime", runtime_instance).expect("Could not name instance of runtime module");
+
+    let built_module_instance = linker.instantiate(&mut store, &built_module).expect("Could not instantiate built module instance");
+
+    // let built_module_instance = Instance::new(&mut store, &built_module, &imports)
+    //     .expect("Could not create instance of the module");
 
     let adder_fn = built_module_instance.get_typed_func::<(i64, i64), i64>(&mut store, "adder").unwrap();
 
@@ -108,26 +116,59 @@ fn build_wasm_module() -> Vec<u8> {
     unsafe {
         let module = BinaryenModuleCreate();
 
-        let mut params = [BinaryenTypeInt64(), BinaryenTypeInt64()];
-        let params = BinaryenTypeCreate(params.as_mut_ptr(), 2);
-        let results = BinaryenTypeInt64();
+        let add_internal_name = CString::new("add_imported").unwrap();
 
-        let x = BinaryenLocalGet(module, 0, BinaryenTypeInt64());
-        let y = BinaryenLocalGet(module, 1, BinaryenTypeInt64());
+        // Import add function from the runtime module
+        {
+            let runtime_module_name = CString::new("runtime").unwrap();
+            let add_external_name = CString::new("add").unwrap();
 
-        let add = BinaryenBinary(module, BinaryenAddInt64(), x, y);
+            let mut params = [BinaryenTypeInt64(), BinaryenTypeInt64()];
+            let params = BinaryenTypeCreate(params.as_mut_ptr(), 2);
+            let results = BinaryenTypeInt64();
+
+            BinaryenAddFunctionImport(
+                module,
+                add_internal_name.as_ptr(),
+                runtime_module_name.as_ptr(),
+                add_external_name.as_ptr(),
+                params,
+                results
+            );
+        }
 
         let func_name = CString::new("adder").unwrap();
 
-        let _ = BinaryenAddFunction(
-            module,
-            func_name.as_ptr(),
-            params,
-            results,
-            ptr::null_mut(),
-            0,
-            add
-        );
+        // Define local adder function
+        {
+            let mut params = [BinaryenTypeInt64(), BinaryenTypeInt64()];
+            let params = BinaryenTypeCreate(params.as_mut_ptr(), 2);
+            let results = BinaryenTypeInt64();
+
+            let x = BinaryenLocalGet(module, 0, BinaryenTypeInt64());
+            let y = BinaryenLocalGet(module, 1, BinaryenTypeInt64());
+
+            // let add = BinaryenBinary(module, BinaryenAddInt64(), x, y);
+
+            let mut add_call_operands = [x, y];
+            let call = BinaryenCall(
+                module,
+                add_internal_name.as_ptr(),
+                add_call_operands.as_mut_ptr(),
+                add_call_operands.len() as u32,
+                results
+            );
+
+            let _ = BinaryenAddFunction(
+                module,
+                func_name.as_ptr(),
+                params,
+                results,
+                ptr::null_mut(),
+                0,
+                call
+            );
+        }
 
         let _ = BinaryenAddFunctionExport(module, func_name.as_ptr(), func_name.as_ptr());
 
