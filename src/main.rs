@@ -3,7 +3,7 @@ use std::mem::size_of;
 use std::os::raw::c_char;
 use std::ptr;
 use std::ptr::slice_from_raw_parts_mut;
-use binaryen_sys::{BinaryenAddFunction, BinaryenAddFunctionExport, BinaryenAddInt64, BinaryenBinary, BinaryenLocalGet, BinaryenModuleCreate, BinaryenModuleDispose, BinaryenModulePrint, BinaryenModuleValidate, BinaryenModuleWrite, BinaryenTypeCreate, BinaryenTypeInt64};
+use binaryen_sys::*;
 use wasmtime::{Engine, Instance, Memory, Module, Store};
 use runtime::Position;
 
