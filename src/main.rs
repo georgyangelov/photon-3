@@ -124,7 +124,7 @@ fn build_wasm_module() -> Vec<u8> {
             let add_external_name = CString::new("add").unwrap();
 
             let mut params = [BinaryenTypeInt64(), BinaryenTypeInt64()];
-            let params = BinaryenTypeCreate(params.as_mut_ptr(), 2);
+            let params = BinaryenTypeCreate(params.as_mut_ptr(), params.len() as u32);
             let results = BinaryenTypeInt64();
 
             BinaryenAddFunctionImport(
@@ -142,7 +142,7 @@ fn build_wasm_module() -> Vec<u8> {
         // Define local adder function
         {
             let mut params = [BinaryenTypeInt64(), BinaryenTypeInt64()];
-            let params = BinaryenTypeCreate(params.as_mut_ptr(), 2);
+            let params = BinaryenTypeCreate(params.as_mut_ptr(), params.len() as u32);
             let results = BinaryenTypeInt64();
 
             let x = BinaryenLocalGet(module, 0, BinaryenTypeInt64());

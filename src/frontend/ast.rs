@@ -9,19 +9,18 @@ pub struct AST {
 #[derive(Debug)]
 pub enum ASTValue {
     Literal(ASTLiteral),
-    Block(Box<[AST]>),
+    Block(Vec<AST>),
 
     Function {
-        params: Box<[ASTParam]>,
+        params: Vec<ASTParam>,
         body: Box<AST>,
-        return_type: Option<Box<AST>>,
-        compile_time: bool,
+        return_type: Option<Box<AST>>
     },
     Call {
-        target: Box<AST>,
+        // may_be_var_call == this being None
+        target: Option<Box<AST>>,
         name: Box<str>,
-        args: Box<[AST]>,
-        maybe_var_call: bool
+        args: Vec<AST>
     },
 
     Let {
@@ -32,7 +31,7 @@ pub enum ASTValue {
     NameRef(Box<str>),
 
     FnType {
-        params: Box<[ASTTypeParam]>,
+        params: Vec<ASTTypeParam>,
         return_type: Box<AST>
     },
 
@@ -60,6 +59,6 @@ pub struct ASTParam {
 #[derive(Debug)]
 pub struct ASTTypeParam {
     pub name: Box<str>,
-    pub typ: Option<Pattern>,
+    pub typ: AST,
     pub location: Location
 }

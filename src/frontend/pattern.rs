@@ -11,13 +11,13 @@ pub enum PatternValue {
     SpecificValue(AST),
     Binding(Box<str>),
     Call {
-        target: AST,
+        // may_be_var_call == this being None
+        target: Option<Box<AST>>,
         name: Box<str>,
-        args: Box<[Pattern]>,
-        maybe_var_call: bool
+        args: Vec<Pattern>
     },
     FunctionType {
-        params: Box<[PatternParam]>,
+        params: Vec<PatternParam>,
         return_type: Box<Pattern>
     }
 }
@@ -25,5 +25,6 @@ pub enum PatternValue {
 #[derive(Debug)]
 pub struct PatternParam {
     pub name: Box<str>,
-    pub typ: Pattern
+    pub typ: Pattern,
+    pub location: Location
 }

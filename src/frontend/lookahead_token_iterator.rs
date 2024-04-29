@@ -39,14 +39,14 @@ impl <I: Iterator<Item = char>> LookaheadTokenIterator<I> {
     }
 }
 
-struct LookaheadIteratorIterator<'a, I: Iterator<Item = char>> {
+pub struct LookaheadIteratorIterator<'a, I: Iterator<Item = char>> {
     lookahead: &'a mut LookaheadTokenIterator<I>,
     i: usize
 }
 
 impl <'a, I: Iterator<Item = char>> LookaheadIteratorIterator<'a, I> {
-    fn next(&mut self) -> Result<&Token, LexerError> {
-        if self.lookahead.buffer.len() < self.i {
+    pub fn next(&mut self) -> Result<&Token, LexerError> {
+        if self.lookahead.buffer.len() <= self.i {
             let token = self.lookahead.lexer.next()?;
 
             self.lookahead.buffer.push_back(token);

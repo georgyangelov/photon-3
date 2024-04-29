@@ -2,22 +2,22 @@ use std::rc::Rc;
 use crate::frontend::location::{Location, Position};
 use crate::frontend::TokenValue::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub value: TokenValue,
     pub location: Location,
     pub whitespace_before: bool
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenValue {
     EOF, NewLine,
     OpenParen, CloseParen, OpenBrace, CloseBrace, OpenBracket, CloseBracket,
     Comma, Dot, At, Colon,
     Val, Recursive,
-    Equal, Plus, Minus, Asterisk, Slash, LessThan, GreaterThan, Not,
+    Equal, Plus, Minus, Asterisk, Slash, LessThan, GreaterThan,
     EqualEqual, PlusEqual, MinusEqual, AsteriskEqual, SlashEqual, LessThanEqual, GreaterThanEqual, NotEqual,
-    And, Or,
+    Not, And, Or,
     Name(Box<str>), IntLiteral(Box<str>), DecimalLiteral(Box<str>), StringLiteral(Box<str>), BoolLiteral(bool)
 }
 
@@ -65,9 +65,8 @@ impl <I: Iterator<Item = char>> Lexer<I> {
     pub fn next(&mut self) -> Result<Token, LexerError> {
         if self.at_start {
             self.init_read();
+            self.advance();
         }
-
-        self.advance();
 
         let had_whitespace = self.skip_whitespace_and_comments() || self.had_newline;
         self.had_newline = false;
@@ -223,7 +222,9 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         })
     }
 
-    fn one_char_token(&self, value: TokenValue, had_whitespace: bool) -> Result<Token, LexerError> {
+    fn one_char_token(&mut self, value: TokenValue, had_whitespace: bool) -> Result<Token, LexerError> {
+        self.advance();
+
         Ok(Token {
             value,
             location: Location { file: self.file.clone(), from: self.position, to: self.next_position },
@@ -234,6 +235,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
     fn two_char_token(&mut self, value: TokenValue, had_whitespace: bool) -> Result<Token, LexerError> {
         let from = self.position;
 
+        self.advance();
         self.advance();
 
         Ok(Token {
