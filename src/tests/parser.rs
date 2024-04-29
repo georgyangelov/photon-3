@@ -235,10 +235,54 @@ fn test_type_annotations_on_values() {
     // assertParse("fn(42): Int", "(type-assert (fn self 42) Int)")
 }
 
+#[test]
+fn test_requires_parens_on_types_of_parameters() {
+    assert_parse_error("(param1: fn arg1, b: Int) 42")
+}
+
+#[test]
+fn test_patterns_in_parameter_types() {
+    assert_parse("(a: val AT) 42", "(fn [(param a (val AT))] 42)");
+    assert_parse("(a: val AT, b: AT) 42", "(fn [(param a (val AT)) (param b AT)] 42)");
+}
+
+#[test]
+fn test_call_patterns_in_parameter_types() {
+    assert_parse("(a: Optional(val T)) 42", "(fn [(param a <Optional self (val T)>)] 42)");
+    assert_parse("(a: Optional.match(val T)) 42", "(fn [(param a <match Optional (val T)>)] 42)");
+    assert_parse("(a: Optional.match(1, val T)) 42", "(fn [(param a <match Optional 1 (val T)>)] 42)");
+    assert_parse("(a: Optional.match(1, Optional(val T))) 42", "(fn [(param a <match Optional 1 <Optional self (val T)>>)] 42)");
+}
+
+#[test]
+fn test_specific_value_patterns_in_parameter_types() {
+    assert_parse("(a: Optional(Int)) 42", "(fn [(param a (Optional self Int))] 42)");
+    assert_parse("(a: Optional.of(Int)) 42", "(fn [(param a (of Optional Int))] 42)");
+    assert_parse("(a: Optional.of(1, Int)) 42", "(fn [(param a (of Optional 1 Int))] 42)");
+}
+
+#[test]
+fn test_type_annotation_on_fn_return_type() {
+    assert_parse("(a: Int): Int { a + 1 }", "(fn [(param a Int)] Int (+ a 1))");
+    assert_parse("(a: Int): Int a + 1", "(fn [(param a Int)] Int (+ a 1))");
+}
+
+#[test]
+fn test_type_annotations_on_val() {
+    assert_parse("val a: Int = 42; a", "(let a (type-assert 42 Int)) a");
+    assert_parse("val a: Stream(Int) = 42; a", "(let a (type-assert 42 (Stream self Int))) a");
+}
+
 fn assert_parse(code: &str, expected: &str) {
     let result = parse(code).expect(format!("Could not parse code {}", code).as_str());
 
     assert_eq!(result, expected)
+}
+
+fn assert_parse_error(code: &str) {
+    let result = parse(code);
+
+    assert!(matches!(result, Err(_)))
 }
 
 fn parse(code: &str) -> Result<String, ParseError> {

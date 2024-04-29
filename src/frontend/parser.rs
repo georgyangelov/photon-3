@@ -195,7 +195,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
 
         let value_ast = Self::assert_ast(
             self.parse_expression(
-                Self::operator_precedence(&Equal).unwrap() + 1,
+                0,
                 require_call_parens,
                 has_lower_priority_target
             )?
@@ -823,7 +823,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
     fn operator_precedence(token: &TokenValue) -> Option<i8> {
         // TODO: Handle *=, /=, +=, -=
         match token {
-            Equal => Some(1),
+            // Equal => Some(1),
             Or => Some(2),
             And => Some(3),
             EqualEqual | LessThan | GreaterThan | LessThanEqual | GreaterThanEqual | NotEqual => Some(4),
