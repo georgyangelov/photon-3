@@ -23,6 +23,12 @@ fn test_negating_expressions() {
     assert_parse("-   (5 + 5)", "(- (+ 5 5))");
 }
 
+#[test]
+fn test_string_literals() {
+    assert_parse("\"Hello world!\"", "\"Hello world!\"");
+    assert_parse("\"\\\"\\n\"", "\"\\\"\\n\"");
+}
+
 fn assert_parse(code: &str, expected: &str) {
     let result = parse(code).expect(format!("Could not parse code {}", code).as_str());
 

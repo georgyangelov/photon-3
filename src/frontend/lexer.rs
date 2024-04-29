@@ -132,11 +132,11 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         let mut string = String::new();
         let from = self.position;
 
-        self.advance();
+        self.advance(); // "
 
         let mut in_escape_sequence = false;
 
-        while self.c != '"' {
+        while in_escape_sequence || self.c != '"' {
             if self.c == EOF {
                 return Err(LexerError::UnclosedStringLiteral(from));
             } else if in_escape_sequence {
@@ -153,7 +153,11 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             } else {
                 string.push(self.c);
             }
+
+            self.advance();
         }
+
+        self.advance(); // "
 
         Ok(Token {
             value: StringLiteral(string.into()),
