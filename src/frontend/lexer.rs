@@ -262,7 +262,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
                 }
             } else if self.c == '#' && self.next_c.is_whitespace() {
                 in_comment = true;
-            } else if !self.c.is_whitespace() {
+            } else if !self.c.is_whitespace() || self.c == '\n' {
                 break;
             }
 
