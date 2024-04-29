@@ -214,12 +214,12 @@ fn test_ambiguous_fn_cases() {
 }
 
 #[test]
-fn test_nested_lambda_calls() {
+fn test_nested_fn_calls() {
     assert_parse("(a) { (b) { a + b } }(1)(41)", "(call (call (fn [(param a)] (fn [(param b)] (+ a b))) 1) 41)");
 }
 
 #[test]
-fn test_lambdas_using_only_braces() {
+fn test_fns_using_only_braces() {
     assert_parse("{ a }", "(fn [] a)");
     assert_parse("val a = 42; { a }", "(let a 42) (fn [] a)");
 }
@@ -271,6 +271,56 @@ fn test_type_annotation_on_fn_return_type() {
 fn test_type_annotations_on_val() {
     assert_parse("val a: Int = 42; a", "(let a (type-assert 42 Int)) a");
     assert_parse("val a: Stream(Int) = 42; a", "(let a (type-assert 42 (Stream self Int))) a");
+}
+
+#[test]
+fn test_parens_for_blocks() {
+    assert_parse("(a; b)", "{ a b }");
+    assert_parse("(a; b) + 1", "(+ { a b } 1)");
+    assert_parse("val a = 11; (val a = 42; () { a }) + a", "(let a 11) (+ { (let a 42) (fn [] a) } a)");
+
+    assert_parse_error("()");
+}
+
+#[test]
+fn test_method_call_precedence() {
+    assert_parse("array.map { 42 }.filter (x) x > 0", "(map array (filter (fn [] 42) (fn [(param x)] (> x 0))))");
+    assert_parse("array.map { 42 } .filter (x) x > 0", "(filter (map array (fn [] 42)) (fn [(param x)] (> x 0)))");
+    assert_parse("array.map({ 42 }).filter (x) x > 0", "(filter (map array (fn [] 42)) (fn [(param x)] (> x 0)))");
+    assert_parse("array.map { 42 }\n.filter (x) x > 0", "(filter (map array (fn [] 42)) (fn [(param x)] (> x 0)))");
+
+    assert_parse("array.map 42.filter", "(map array (filter 42))");
+    assert_parse("array.map(42 .filter)", "(map array (filter 42))");
+    assert_parse("array.map 42 .filter", "(filter (map array 42))");
+    assert_parse("array.map(42).filter", "(filter (map array 42))");
+
+    assert_parse("array.map 1 + 2.filter", "(map array (+ 1 (filter 2)))");
+    assert_parse("array.map 1 + 2 .filter", "(filter (map array (+ 1 2)))");
+    assert_parse("array.map 1.to_s + 2 .filter", "(filter (map array (+ (to_s 1) 2)))");
+
+    assert_parse("array.map array2.map 1 .filter", "(filter (map array (map array2 1)))");
+
+    assert_parse("map 42.filter", "(map self (filter 42))");
+    assert_parse("map(42 .filter)", "(map self (filter 42))");
+    assert_parse("map 42 .filter", "(filter (map self 42))");
+    assert_parse("map(42).filter", "(filter (map self 42))");
+}
+
+#[test]
+fn test_types_for_function_values() {
+    assert_parse("val a: (): Int = () 42; a", "(let a (type-assert (fn [] 42) (fn-type [] Int))) a");
+    assert_parse("val a: ((): Int) = () 42; a", "(let a (type-assert (fn [] 42) (fn-type [] Int))) a");
+}
+
+#[test]
+fn test_function_types_with_argument_types() {
+    assert_parse("(a: Int): Int", "(fn-type [(param a Int)] Int)");
+    assert_parse("(a: Int, b: String): Int", "(fn-type [(param a Int) (param b String)] Int)");
+}
+
+#[test]
+fn test_generic_fns_with_patterns_in_fn_types() {
+    assert_parse("val fn = (a: (n: val T): T) a(42); fn((a) a)", "(let fn (fn [(param a (fn-type [(param n (val T))] T))] (a self 42))) (fn self (fn [(param a)] a))")
 }
 
 fn assert_parse(code: &str, expected: &str) {
