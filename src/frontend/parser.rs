@@ -85,16 +85,13 @@ impl <I: Iterator<Item = char>> Parser<I> {
                 return Ok(left)
             }
 
-            let method_name = Self::binary_operator_method_name(&self.t.value)
-                .expect(format!("Operator name not found: {:?}", self.t.value.clone()).as_str());
-
-            self.read()?; // <operator>
+            let operator = self.read()?; // <operator>
 
             let right = self.parse_expression(precedence + 1, require_call_parens, has_lower_priority_target)?;
 
             let left_ast = Self::assert_ast(left)?;
 
-            left = if self.t.value == Colon {
+            left = if operator.value == Colon {
                 let right = Self::assert_ast(right)?;
                 let location = left_ast.location.extend(&right.location);
 
@@ -106,6 +103,9 @@ impl <I: Iterator<Item = char>> Parser<I> {
                     location
                 })
             } else if let ASTOrPattern::Pattern(right) = right {
+                let method_name = Self::binary_operator_method_name(&operator.value)
+                    .expect(format!("Operator name not found: {:?}", operator.value.clone()).as_str());
+
                 let location = left_ast.location.extend(&right.location);
 
                 ASTOrPattern::Pattern(Pattern {
@@ -117,6 +117,9 @@ impl <I: Iterator<Item = char>> Parser<I> {
                     location
                 })
             } else {
+                let method_name = Self::binary_operator_method_name(&operator.value)
+                    .expect(format!("Operator name not found: {:?}", operator.value.clone()).as_str());
+
                 let right = Self::assert_ast(right)?;
                 let location = left_ast.location.extend(&right.location);
 
