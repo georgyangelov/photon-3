@@ -1,13 +1,53 @@
-use crate::compiler::lexical_scope::LexicalScope::{BlockScope, FnScope, RootScope};
 use crate::compiler::mir::{LocalSlotRef};
 
 pub enum LexicalScope<'a> {
-    RootScope { globals: Vec<Global> },
-
-    FnScope { parent: &'a mut LexicalScope<'a>, stack_slots: Vec<Local>, captures: Vec<Capture> },
-
-    BlockScope { parent: &'a mut LexicalScope<'a>, locals: Vec<(String, LocalSlotRef)> }
+    Root(&'a mut RootScope),
+    Fn(&'a mut FnScope<'a>),
+    Block(&'a mut BlockScope<'a>)
 }
+
+pub struct RootScope {
+    globals: Vec<Global>,
+    // statics: Vec<Static>
+}
+
+impl RootScope {
+    fn new() -> Self {
+        RootScope { globals: Vec::new() }
+    }
+}
+
+pub struct FnScope<'a> {
+    parent: &'a mut LexicalScope<'a>,
+    stack_slots: Vec<Local>,
+    captures: Vec<Capture>
+}
+
+impl <'a> FnScope<'a> {
+    pub fn define_name(&mut self, name: String) -> LocalSlotRef {
+        let i = self.stack_slots.len();
+
+        self.stack_slots.push(Local { name });
+
+        LocalSlotRef { i }
+    }
+}
+
+pub struct BlockScope<'a> {
+    parent: &'a mut LexicalScope<'a>,
+    locals: Vec<(String, LocalSlotRef)>
+}
+
+impl <'a> BlockScope<'a> {
+    pub fn define_name(&mut self, name: String) -> LocalSlotRef {
+        let slot_ref = self.parent.define_stack_slot(name.clone());
+
+        self.locals.push((name, slot_ref));
+
+        slot_ref
+    }
+}
+
 
 // pub struct LexicalScope<'a> {
 //     parent: Option<&'a mut LexicalScope<'a>>,
@@ -18,6 +58,10 @@ pub enum LexicalScope<'a> {
 struct Global {
     name: String
     // typ: MIRType,
+}
+
+struct Static {
+    name: String
 }
 
 struct Local {
@@ -48,15 +92,11 @@ pub struct Capture {
 }
 
 impl <'a> LexicalScope<'a> {
-    pub fn new_root() -> Self {
-        RootScope { globals: Vec::new() }
-    }
-
-    pub fn new_child_block(&mut self) -> Self {
+    pub fn new_child_block(&mut self) -> BlockScope {
         BlockScope { parent: self, locals: Vec::new() }
     }
 
-    pub fn new_child_fn(&mut self, params: Vec<String>) -> Self {
+    pub fn new_child_fn(&mut self, params: Vec<String>) -> FnScope {
         FnScope {
             parent: self,
             stack_slots: params.into_iter().map(|name| Local { name }).collect(),
@@ -66,36 +106,24 @@ impl <'a> LexicalScope<'a> {
 
     pub fn define_name(&mut self, name: String) -> LocalSlotRef {
         match self {
-            RootScope { .. } => panic!("Cannot define names in the global scope"),
-            FnScope { stack_slots, .. } => {
-                let i = stack_slots.len();
-
-                stack_slots.push(Local { name });
-
-                LocalSlotRef { i }
-            }
-            BlockScope { parent, locals } => {
-                let slot_ref = parent.define_stack_slot(name.clone());
-
-                locals.push((name, slot_ref));
-
-                slot_ref
-            }
+            LexicalScope::Root(_) => panic!("Cannot define names in the global scope"),
+            LexicalScope::Fn(scope) => scope.define_name(name),
+            LexicalScope::Block(scope) => scope.define_name(name)
         }
     }
 
     fn define_stack_slot(&mut self, name: String) -> LocalSlotRef {
         match self {
-            RootScope { .. } => panic!("Cannot define names in the global scope"),
-            FnScope { .. } => self.define_name(name),
-            BlockScope { parent, .. } => parent.define_stack_slot(name)
+            LexicalScope::Root(_) => panic!("Cannot define names in the global scope"),
+            LexicalScope::Fn(scope) => scope.define_name(name),
+            LexicalScope::Block(scope) => scope.parent.define_stack_slot(name)
         }
     }
 
     pub fn access_name(&mut self, name: &str) -> Option<SlotRef> {
         match self {
-            RootScope { globals } => {
-                for (i, global) in globals.iter().enumerate() {
+            LexicalScope::Root(scope) => {
+                for (i, global) in scope.globals.iter().enumerate() {
                     if global.name == name {
                         return Some(SlotRef::Global(GlobalSlotRef { i }))
                     }
@@ -104,14 +132,14 @@ impl <'a> LexicalScope<'a> {
                 None
             }
 
-            FnScope { parent, stack_slots, captures } => {
-                for (i, local) in stack_slots.iter().enumerate() {
+            LexicalScope::Fn(scope) => {
+                for (i, local) in scope.stack_slots.iter().enumerate() {
                     if local.name == name {
                         return Some(SlotRef::Local(LocalSlotRef { i }))
                     }
                 }
 
-                let parent_slot_ref = match parent.access_name(name) {
+                let parent_slot_ref = match scope.parent.access_name(name) {
                     None => return None,
                     Some(global_ref @ SlotRef::Global(_)) => return Some(global_ref),
                     Some(SlotRef::Local(local_ref)) => local_ref
@@ -119,19 +147,19 @@ impl <'a> LexicalScope<'a> {
 
                 let captured_slot_ref = self.define_name(String::from(name));
 
-                captures.push(Capture { from: parent_slot_ref, to: captured_slot_ref });
+                scope.captures.push(Capture { from: parent_slot_ref, to: captured_slot_ref });
 
                 Some(SlotRef::Local(captured_slot_ref))
             }
 
-            BlockScope { parent, locals } => {
-                for (local_name, local_ref) in locals {
+            LexicalScope::Block(scope) => {
+                for (local_name, local_ref) in scope.locals {
                     if local_name == name {
                         return Some(SlotRef::Local(*local_ref))
                     }
                 }
 
-                parent.access_name(name)
+                scope.parent.access_name(name)
             }
         }
     }

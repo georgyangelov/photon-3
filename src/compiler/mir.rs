@@ -1,28 +1,49 @@
-use crate::compiler::lexical_scope::LocalSlotRef;
+use crate::compiler::lexical_scope::{Capture, GlobalSlotRef, LocalSlotRef};
 use crate::frontend::Location;
 
 pub struct MIR {
-    pub node: MIRNode,
-    pub typ: MIRType,
+    pub node: Node,
+    pub typ: CompileTimeValueRef,
     pub location: Location
 }
 
-pub enum MIRNode {
-    // GlobalRef(i32),
+pub enum Node {
+    CompileTimeRef(CompileTimeValueRef),
+
+    GlobalRef(GlobalSlotRef),
+
+    ConstStringRef(usize),
+
+    LiteralI32(i32),
+    LiteralI64(i64),
+    LiteralF32(f32),
+    LiteralF64(f64),
 
     LocalSet(LocalSlotRef, Box<MIR>),
-    LocalRef(LocalSlotRef),
+    LocalGet(LocalSlotRef),
 
     Block(Vec<MIR>),
 
     Call(FunctionRef, Vec<MIR>)
 }
 
-pub enum MIRType {
+#[derive(Copy)]
+pub struct CompileTimeValueRef {
+    i: usize
+}
 
+pub struct FunctionTemplate {
+    pub body: MIR
+}
+
+pub struct Function {
+    pub param_types: Vec<CompileTimeValueRef>,
+    pub captures: Vec<Capture>,
+    pub body: MIR,
+    pub return_type: CompileTimeValueRef
 }
 
 #[derive(Copy)]
 pub struct FunctionRef {
-    i: i32
+    i: usize
 }

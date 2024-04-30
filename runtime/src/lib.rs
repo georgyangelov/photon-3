@@ -57,6 +57,16 @@ pub extern fn buffer_add_two_numbers(buffer: &Vec<i64>) -> i64 {
 pub extern fn drop_buffer(buffer: Box<Vec<u8>>) {
 }
 
+#[no_mangle]
+pub extern fn build_str_slice() -> &'static str {
+    "Hello world"
+}
+
+#[no_mangle]
+pub extern fn build_string() -> Box<String> {
+    Box::new(String::from("Hello world"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
