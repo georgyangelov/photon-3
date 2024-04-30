@@ -19,11 +19,14 @@ pub struct ModuleCompiler {
 
     // pub compile_time_slots: Vec<Any>,
     pub compile_time_functions: Vec<lir::Function>,
+    pub compile_time_main: Vec<mir::MIR>,
+
     pub run_time_functions: Vec<mir::Function>
 }
 
 pub struct Module {
     pub compile_time_functions: Vec<lir::Function>,
+
     // pub compile_time_main: lir::Function,
     //
     pub run_time_functions: Vec<mir::Function>,
@@ -81,10 +84,9 @@ impl ModuleCompiler {
 
     fn compile_ast(
         &mut self,
-        c_scope: LexicalScope,
-        r_scope: LexicalScope,
+        scope: &mut LexicalScope,
         ast: AST
-    ) -> Result<mir::MIR, CompileError> {
+    ) -> Result<Option<mir::MIR>, CompileError> {
         let node = match ast.value {
             ASTValue::Literal(ASTLiteral::Bool(value)) => mir::Node::LiteralI32(if value { 1 } else { 0 }),
             ASTValue::Literal(ASTLiteral::Int(value)) => mir::Node::LiteralI64(value),
@@ -97,14 +99,50 @@ impl ModuleCompiler {
                 mir::Node::ConstStringRef(offset)
             },
 
-            ASTValue::Block(_) => {}
+            ASTValue::Block(asts) => {
+                let mut mirs = Vec::with_capacity(asts.len());
+                for ast in asts {
+                    let mut inner_c_scope = c_scope.new_child_block();
+                    let mut inner_r_scope = r_scope.new_child_block();
+
+                    let mut inner_c_lex_scope = LexicalScope::Block(&mut inner_c_scope);
+                    let mut inner_r_lex_scope = LexicalScope::Block(&mut inner_r_scope);
+
+                    let mir = self.compile_ast(
+                        &mut inner_c_lex_scope,
+                        &mut inner_r_lex_scope,
+                        ast
+                    )?;
+
+                    if let Some(mir) = mir {
+                        mirs.push(mir);
+                    }
+                }
+
+                mir::Node::Block(mirs)
+            },
+
+            ASTValue::Let { name, value, recursive } => {
+                let value_mir = self.compile_ast(
+                    c_scope,
+                    r_scope,
+
+                )
+            },
+
+            ASTValue::NameRef(_) => {}
+
             ASTValue::Function(_) => {}
             ASTValue::Call { .. } => {}
-            ASTValue::Let { .. } => {}
-            ASTValue::NameRef(_) => {}
+
             ASTValue::FnType { .. } => {}
             ASTValue::TypeAssert { .. } => {}
-        }
+        };
+
+        Ok(Some(mir::MIR {
+            node,
+            location: ast.location
+        }))
     }
 }
 
