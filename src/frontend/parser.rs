@@ -558,11 +558,11 @@ impl <I: Iterator<Item = char>> Parser<I> {
             };
 
             Ok(ASTOrPattern::AST(AST {
-                value: ASTValue::Function {
+                value: ASTValue::Function(ASTFunction {
                     params,
                     body: Box::new(body),
                     return_type
-                },
+                }),
                 location: start_location.extend(&self.last_location)
             }))
         } else {

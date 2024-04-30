@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
-use crate::frontend::{AST, ASTLiteral, ASTValue, Pattern, PatternValue};
+use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue, Pattern, PatternValue};
 
 impl Display for AST {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -24,7 +24,7 @@ impl Display for ASTValue {
                 }
             }
 
-            ASTValue::Function { params, return_type, body } => {
+            ASTValue::Function(ASTFunction { params, return_type, body }) => {
                 write!(f, "(fn [")?;
 
                 for (i, param) in params.iter().enumerate() {

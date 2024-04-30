@@ -11,11 +11,7 @@ pub enum ASTValue {
     Literal(ASTLiteral),
     Block(Vec<AST>),
 
-    Function {
-        params: Vec<ASTParam>,
-        body: Box<AST>,
-        return_type: Option<Box<AST>>
-    },
+    Function(ASTFunction),
     Call {
         // may_be_var_call == this being None
         target: Option<Box<AST>>,
@@ -39,6 +35,13 @@ pub enum ASTValue {
         value: Box<AST>,
         typ: Box<AST>
     }
+}
+
+#[derive(Debug)]
+pub struct ASTFunction {
+    pub params: Vec<ASTParam>,
+    pub body: Box<AST>,
+    pub return_type: Option<Box<AST>>
 }
 
 #[derive(Debug)]

@@ -43,8 +43,8 @@ pub struct GlobalSlotRef {
 
 #[derive(Copy)]
 pub struct Capture {
-    from: LocalSlotRef,
-    to: LocalSlotRef
+    pub from: LocalSlotRef,
+    pub to: LocalSlotRef
 }
 
 impl <'a> LexicalScope<'a> {
