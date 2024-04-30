@@ -1,7 +1,9 @@
 use crate::compiler::mir::{LocalSlotRef};
 
 pub struct RootScope {
-    // TODO: Separate globals for compile-time code and for run-time code
+    // TODO: Separate globals for compile-time code and for run-time code.
+    //       Actually it's probably better to annotate the globals so that we can provide
+    //       useful error messages like "Cannot use fs in a compile-time context"
     globals: Vec<Global>,
 
     compile_time_slot: Vec<CompileTimeSlot>
@@ -11,12 +13,12 @@ pub struct RootScope {
 
 pub trait LexicalScope {
     fn define_compile_time_slot(&mut self, name: Option<String>) -> CompileTimeSlotRef;
-    fn define_stack_slot(&mut self, name: String) -> LocalSlotRef;
+    fn define_stack_slot(&mut self, name: Option<String>) -> LocalSlotRef;
     fn access_name(&mut self, name: &str) -> Option<SlotRef>;
 }
 
 impl RootScope {
-    fn new() -> Self {
+    pub fn new() -> Self {
         RootScope { globals: Vec::new(), compile_time_slot: Vec::new() }
     }
 }
@@ -30,7 +32,7 @@ impl LexicalScope for RootScope {
         CompileTimeSlotRef { i }
     }
 
-    fn define_stack_slot(&mut self, name: String) -> LocalSlotRef {
+    fn define_stack_slot(&mut self, _: String) -> LocalSlotRef {
         panic!("Cannot define new stack slots in the global scope")
     }
 
@@ -103,7 +105,7 @@ impl <'a> LexicalScope for FnScope<'a> {
 
 pub struct BlockScope<'a> {
     parent: &'a mut dyn LexicalScope<'a>,
-    locals: Vec<(String, SlotRef)>
+    locals: Vec<(Option<String>, SlotRef)>
 }
 
 impl <'a> BlockScope<'a> {
@@ -111,7 +113,7 @@ impl <'a> BlockScope<'a> {
         BlockScope { parent, locals: Vec::new() }
     }
 
-    pub fn define_name(&mut self, name: String) -> LocalSlotRef {
+    pub fn define_name(&mut self, name: Option<String>) -> LocalSlotRef {
         let slot_ref = self.parent.define_stack_slot(name.clone());
 
         self.locals.push((name, SlotRef::Local(slot_ref)));
@@ -119,10 +121,38 @@ impl <'a> BlockScope<'a> {
         slot_ref
     }
 
-    pub fn define_compile_time_name(&mut self, name: String) -> CompileTimeSlotRef {
+    pub fn define_compile_time_local_name(
+        &mut self,
+        name: String,
+
+        // This is the local ref in the compile-time code. We will copy this to a
+        // compile-time slot once it's used in run-time code.
+        // Otherwise, it's only local to the compile-time code.
+        compile_time_local_scope_ref: LocalSlotRef
+    ) {
+        self.locals.push((Some(name), SlotRef::CompileTimeLocal(compile_time_local_scope_ref)));
+    }
+
+    pub fn define_compile_time_export_name(
+        &mut self,
+        name: String
+    ) -> CompileTimeSlotRef {
         let slot_ref = self.parent.define_compile_time_slot(Some(name.clone()));
 
-        self.locals.push((name, SlotRef::CompileTime(slot_ref)));
+        let mut index = -1;
+        for (i, (slot_name, _)) in self.locals.iter().enumerate() {
+            if let Some(slot_name) = slot_name {
+                if slot_name == &name {
+                    index = i;
+                }
+            }
+        }
+
+        if index > 0 {
+            self.locals[index] = (Some(name), SlotRef::CompileTime(slot_ref));
+        } else {
+            self.locals.push((Some(name), SlotRef::CompileTime(slot_ref)));
+        }
 
         slot_ref
     }
@@ -133,14 +163,16 @@ impl <'a> LexicalScope for BlockScope<'a> {
         self.parent.define_compile_time_slot(name)
     }
 
-    fn define_stack_slot(&mut self, name: String) -> LocalSlotRef {
+    fn define_stack_slot(&mut self, name: Option<String>) -> LocalSlotRef {
         self.parent.define_stack_slot(name)
     }
 
     fn access_name(&mut self, name: &str) -> Option<SlotRef> {
         for (local_name, slot_ref) in &self.locals {
-            if local_name == name {
-                return Some(*slot_ref)
+            if let Some(local_name) = local_name {
+                if local_name == name {
+                    return Some(*slot_ref)
+                }
             }
         }
 
@@ -174,6 +206,7 @@ pub struct CompileTimeSlotRef {
 #[derive(Copy)]
 pub enum SlotRef {
     CompileTime(CompileTimeSlotRef),
+    CompileTimeLocal(LocalSlotRef),
     Global(GlobalSlotRef),
     Local(LocalSlotRef)
 }
