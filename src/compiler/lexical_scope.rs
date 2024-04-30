@@ -1,5 +1,3 @@
-use crate::compiler::mir::{LocalSlotRef};
-
 pub struct RootScope {
     // TODO: Separate globals for compile-time code and for run-time code.
     //       Actually it's probably better to annotate the globals so that we can provide
@@ -32,7 +30,7 @@ impl LexicalScope for RootScope {
         CompileTimeSlotRef { i }
     }
 
-    fn define_stack_slot(&mut self, _: String) -> LocalSlotRef {
+    fn define_stack_slot(&mut self, _: Option<String>) -> LocalSlotRef {
         panic!("Cannot define new stack slots in the global scope")
     }
 
@@ -60,10 +58,10 @@ pub struct FnScope<'a> {
 }
 
 impl <'a> FnScope<'a> {
-    pub fn new(parent: &mut dyn LexicalScope, params: Vec<String>) -> Self {
-        FnScope {
+    pub fn new(parent: &'a mut dyn LexicalScope, params: Vec<String>) -> Self {
+        Self {
             parent,
-            stack_slots: params.into_iter().map(|name| Local { name }).collect(),
+            stack_slots: params.into_iter().map(|name| Local { name: Some(name) }).collect(),
             captures: Vec::new()
         }
     }
@@ -74,7 +72,7 @@ impl <'a> LexicalScope for FnScope<'a> {
         self.parent.define_compile_time_slot(name)
     }
 
-    fn define_stack_slot(&mut self, name: String) -> LocalSlotRef {
+    fn define_stack_slot(&mut self, name: Option<String>) -> LocalSlotRef {
         let i = self.stack_slots.len();
 
         self.stack_slots.push(Local { name });
@@ -84,18 +82,20 @@ impl <'a> LexicalScope for FnScope<'a> {
 
     fn access_name(&mut self, name: &str) -> Option<SlotRef> {
         for (i, local) in self.stack_slots.iter().enumerate() {
-            if local.name == name {
-                return Some(SlotRef::Local(LocalSlotRef { i }))
+            if let Some(local_name) = &local.name {
+                if local_name == name {
+                    return Some(SlotRef::Local(LocalSlotRef { i }))
+                }
             }
         }
 
         let parent_slot_ref = match self.parent.access_name(name) {
             None => return None,
-            Some(global_ref @ SlotRef::Global(_)) => return Some(global_ref),
-            Some(SlotRef::Local(local_ref)) => local_ref
+            Some(SlotRef::Local(local_ref)) => local_ref,
+            Some(other_ref @ _) => return Some(other_ref),
         };
 
-        let captured_slot_ref = self.define_name(String::from(name));
+        let captured_slot_ref = self.define_stack_slot(Some(String::from(name)));
 
         self.captures.push(Capture { from: parent_slot_ref, to: captured_slot_ref });
 
@@ -104,12 +104,12 @@ impl <'a> LexicalScope for FnScope<'a> {
 }
 
 pub struct BlockScope<'a> {
-    parent: &'a mut dyn LexicalScope<'a>,
+    parent: &'a mut dyn LexicalScope,
     locals: Vec<(Option<String>, SlotRef)>
 }
 
 impl <'a> BlockScope<'a> {
-    pub fn new(parent: &mut dyn LexicalScope) -> Self {
+    pub fn new(parent: &'a mut dyn LexicalScope) -> Self {
         BlockScope { parent, locals: Vec::new() }
     }
 
@@ -139,16 +139,16 @@ impl <'a> BlockScope<'a> {
     ) -> CompileTimeSlotRef {
         let slot_ref = self.parent.define_compile_time_slot(Some(name.clone()));
 
-        let mut index = -1;
+        let mut index = None;
         for (i, (slot_name, _)) in self.locals.iter().enumerate() {
             if let Some(slot_name) = slot_name {
                 if slot_name == &name {
-                    index = i;
+                    index = Some(i);
                 }
             }
         }
 
-        if index > 0 {
+        if let Some(index) = index {
             self.locals[index] = (Some(name), SlotRef::CompileTime(slot_ref));
         } else {
             self.locals.push((Some(name), SlotRef::CompileTime(slot_ref)));
@@ -190,7 +190,7 @@ struct Static {
 }
 
 struct Local {
-    name: String
+    name: Option<String>
     // typ: MIRType,
 }
 
@@ -198,12 +198,12 @@ pub struct CompileTimeSlot {
     name: Option<String>
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct CompileTimeSlotRef {
     i: usize
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub enum SlotRef {
     CompileTime(CompileTimeSlotRef),
     CompileTimeLocal(LocalSlotRef),
@@ -211,17 +211,17 @@ pub enum SlotRef {
     Local(LocalSlotRef)
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct LocalSlotRef {
     i: usize
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct GlobalSlotRef {
     i: usize
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct Capture {
     pub from: LocalSlotRef,
     pub to: LocalSlotRef

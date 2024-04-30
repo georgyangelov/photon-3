@@ -87,7 +87,9 @@ impl Display for ASTValue {
                 write!(f, "] {})", return_type)
             }
 
-            ASTValue::TypeAssert { value, typ } => write!(f, "(type-assert {} {})", value, typ)
+            ASTValue::TypeAssert { value, typ } => write!(f, "(type-assert {} {})", value, typ),
+
+            ASTValue::CompileTimeExpr(ast) => write!(f, "@{}", ast)
         }
     }
 }

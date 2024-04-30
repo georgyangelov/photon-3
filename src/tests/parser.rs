@@ -323,6 +323,20 @@ fn test_generic_fns_with_patterns_in_fn_types() {
     assert_parse("val fn = (a: (n: val T): T) a(42); fn((a) a)", "(let fn (fn [(param a (fn-type [(param n (val T))] T))] (a self 42))) (fn self (fn [(param a)] a))")
 }
 
+#[test]
+fn test_compile_time_expressions() {
+    assert_parse("@42", "@42");
+    assert_parse("@name", "@name");
+    assert_parse("@(1 + 1)", "@(+ 1 1)");
+    assert_parse("@array.map 42", "@(map array 42)");
+    assert_parse("val a = @{ 42 }", "(let a @(fn [] 42))");
+    assert_parse("@1 + 1", "(+ @1 1)");
+    assert_parse("@method(1 + 1)", "@(method self (+ 1 1))");
+    assert_parse("@method 1 + 1", "@(method self (+ 1 1))");
+    assert_parse("@method\n1 + 1", "@method (+ 1 1)");
+    assert_parse("@method.call 1 + 1", "@(call method (+ 1 1))");
+}
+
 fn assert_parse(code: &str, expected: &str) {
     let result = parse(code).expect(format!("Could not parse code {}", code).as_str());
 

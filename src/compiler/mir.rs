@@ -39,7 +39,7 @@ pub struct Function {
     pub return_type: CompileTimeSlotRef
 }
 
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 pub struct FunctionRef {
     i: usize
 }

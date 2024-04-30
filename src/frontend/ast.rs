@@ -34,7 +34,9 @@ pub enum ASTValue {
     TypeAssert {
         value: Box<AST>,
         typ: Box<AST>
-    }
+    },
+
+    CompileTimeExpr(Box<AST>)
 }
 
 #[derive(Debug)]

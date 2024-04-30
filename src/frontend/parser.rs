@@ -136,12 +136,17 @@ impl <I: Iterator<Item = char>> Parser<I> {
     }
 
     fn parse_primary(&mut self, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
+        // TODO: Check if this allows to have `-val a = 42` which should be invalid
         if self.t.value == Recursive || self.t.value == Val {
             return self.parse_val(require_call_parens, has_lower_priority_target);
         }
 
         if self.t.value == Minus {
             return self.parse_unary_operator(require_call_parens, has_lower_priority_target)
+        }
+
+        if self.t.value == At {
+            return self.parse_compile_time_expression(require_call_parens, has_lower_priority_target)
         }
 
         let mut target = self.parse_call_target(require_call_parens, has_lower_priority_target)?;
@@ -232,7 +237,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             &Name(_) => self.parse_name(),
 
             &OpenBrace => self.parse_lambda_or_lambda_type(has_lower_priority_target),
-            &At => todo!("Parse the compile-time call syntax"),
+            &At => self.parse_compile_time_expression(require_call_parens, has_lower_priority_target),
 
             &Not => self.parse_unary_operator(require_call_parens, has_lower_priority_target),
 
@@ -240,6 +245,18 @@ impl <I: Iterator<Item = char>> Parser<I> {
 
             _ => Err(ParseError::UnexpectedToken("Unexpected token".into(), self.t.clone()))
         }
+    }
+
+    fn parse_compile_time_expression(&mut self, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
+        let at = self.read()?; // @
+
+        let expr = self.parse_primary(require_call_parens, has_lower_priority_target)?;
+        let expr = Self::assert_ast(expr)?;
+
+        Ok(ASTOrPattern::AST(AST {
+            value: ASTValue::CompileTimeExpr(Box::new(expr)),
+            location: at.location.extend(&self.last_location)
+        }))
     }
 
     fn parse_bool(&mut self) -> Result<ASTOrPattern, ParseError> {
