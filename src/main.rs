@@ -9,6 +9,7 @@ use runtime::Position;
 
 mod frontend;
 mod tests;
+mod compiler;
 
 fn main() {
     let engine = Engine::default();
