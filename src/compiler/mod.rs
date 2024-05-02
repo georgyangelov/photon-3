@@ -1,6 +1,5 @@
 mod ir;
 mod mir;
 mod compiler;
-mod lexical_scope;
 mod lir;
-pub mod scope;
+pub mod lexical_scope;

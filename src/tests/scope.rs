@@ -1,4 +1,4 @@
-use crate::compiler::scope::{BlockScope, Capture, ComptimeMainStackFrame, ComptimePortal, NameAccessError, NameRef, RootScope, StackFrame};
+use crate::compiler::lexical_scope::*;
 
 #[test]
 fn test_root_level_locals() {
