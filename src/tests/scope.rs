@@ -1,4 +1,4 @@
-use crate::compiler::scope::{BlockScope, ComptimeMainStackFrame, ComptimePortal, NameAccessError, NameRef, RootScope, StackFrame};
+use crate::compiler::scope::{BlockScope, Capture, ComptimeMainStackFrame, ComptimePortal, NameAccessError, NameRef, RootScope, StackFrame};
 
 #[test]
 fn test_root_level_locals() {
@@ -9,8 +9,8 @@ fn test_root_level_locals() {
      */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     let local_ref = block.define_local(String::from("a"));
     let result = block.access_local("a");
@@ -25,8 +25,8 @@ fn test_missing_local() {
      */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     let result = block.access_local("a");
 
@@ -42,8 +42,8 @@ fn test_defining_comptime_vals_at_root() {
      */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     block.define_comptime_main_local(String::from("a"));
 
@@ -63,13 +63,13 @@ fn test_using_comptime_vals_from_comptime_block() {
      */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     let comptime_local_ref = block.define_comptime_main_local(String::from("a"));
 
-    let mut comptime_portal = ComptimePortal::new(&mut block);
-    let mut block = BlockScope::new(&mut comptime_portal);
+    let mut comptime_portal = block.new_child_comptime_portal();
+    let mut block = comptime_portal.new_child_block();
 
     let result = block.access_local("a");
 
@@ -87,12 +87,12 @@ fn test_using_comptime_vals_from_runtime_block() {
      */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     block.define_comptime_main_local(String::from("a"));
 
-    let mut block = BlockScope::new(&mut block);
+    let mut block = block.new_child_block();
 
     let result = block.access_local("a");
 
@@ -112,14 +112,14 @@ fn test_reuses_comptime_slots() {
      */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     block.define_comptime_main_local(String::from("a"));
 
     let result_1 = block.access_local("a");
 
-    let mut block = BlockScope::new(&mut block);
+    let mut block = block.new_child_block();
 
     let result_2 = block.access_local("a");
 
@@ -135,13 +135,13 @@ fn test_cannot_reference_runtime_vals_from_comptime() {
     */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     block.define_local(String::from("a"));
 
-    let mut comptime_portal = ComptimePortal::new(&mut block);
-    let mut block = BlockScope::new(&mut comptime_portal);
+    let mut comptime_portal = block.new_child_comptime_portal();
+    let mut block = comptime_portal.new_child_block();
 
     let result = block.access_local("a");
 
@@ -159,18 +159,18 @@ fn test_cannot_reference_runtime_vals_from_comptime_nested() {
     */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     {
-        let mut comptime_portal = ComptimePortal::new(&mut block);
-        let mut block = BlockScope::new(&mut comptime_portal);
+        let mut comptime_portal = block.new_child_comptime_portal();
+        let mut block = comptime_portal.new_child_block();
 
         block.define_local(String::from("a"));
 
         {
-            let mut comptime_portal = ComptimePortal::new(&mut block);
-            let mut block = BlockScope::new(&mut comptime_portal);
+            let mut comptime_portal = block.new_child_comptime_portal();
+            let mut block = comptime_portal.new_child_block();
 
             let result = block.access_local("a");
 
@@ -192,57 +192,120 @@ fn test_captures_comptime_local_in_comptime_fn() {
     */
 
     let mut root = RootScope::new();
-    let mut comptime_main = ComptimeMainStackFrame::new(&mut root);
-    let mut block = BlockScope::new(&mut comptime_main);
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
 
     let from_ref = block.define_comptime_main_local(String::from("a"));
 
     {
-        let mut comptime_portal = ComptimePortal::new(&mut block);
-        let mut block = BlockScope::new(&mut comptime_portal);
+        let mut comptime_portal = block.new_child_comptime_portal();
+        let mut block = comptime_portal.new_child_block();
 
         {
-            let mut stack_frame = StackFrame::new(&mut block);
-            let mut block = BlockScope::new(&mut stack_frame);
+            let mut stack_frame = block.new_child_stack_frame();
+            let mut block = stack_frame.new_child_block();
 
             let result = block.access_local("a");
 
             assert!(matches!(result, Ok(NameRef::Local(_))));
-            assert_eq!(stack_frame.captures.len(), 1);
-            // assert_eq!(stack_frame.captures.get(0), Some());
+
+            match stack_frame.captures.get(0) {
+                None => panic!("Expected to have a capture"),
+                Some(Capture { from, .. }) => {
+                    assert_eq!(*from, from_ref)
+                }
+            }
         }
     }
 }
 
-/*
-    @(a) {
-      a // local
+#[test]
+fn test_capture_nested_fns_in_comptime() {
+    /*
+        @(a) {
+          { // capture a
+            a // local
+          }
+        }
+    */
+
+    let mut root = RootScope::new();
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
+
+    {
+        let mut comptime_portal = block.new_child_comptime_portal();
+        let mut block = comptime_portal.new_child_block();
+
+        {
+            let mut stack_frame = block.new_child_stack_frame();
+            let mut block = stack_frame.new_child_block();
+
+            let from_ref = block.define_local(String::from("a"));
+
+            {
+                let mut stack_frame = block.new_child_stack_frame();
+                let mut block = stack_frame.new_child_block();
+
+                let result = block.access_local("a");
+
+                assert!(matches!(result, Ok(NameRef::Local(_))));
+
+                match stack_frame.captures.get(0) {
+                    None => panic!("Expected to have a capture"),
+                    Some(Capture { from, .. }) => {
+                        assert_eq!(*from, from_ref)
+                    }
+                }
+            }
+        }
     }
-*/
+}
 
-/*
-    @(a) {
-      { // capture a
-        a // local
-      }
+#[test]
+fn test_use_comptime_in_another_comptime_fn() {
+    // This can't be a capture because c doesn't have a name outside that can be captured, although
+    // captures don't need to have names, so... it can probably be a capture, but what if there are
+    // multiple levels of closures?
+    //
+    // Actually this should be fine
+    /*
+        @val b = 42
+
+        @(a) {
+          @val c = 42
+
+          c // comptime export of c
+        }
+    */
+
+    let mut root = RootScope::new();
+    let mut comptime_main = root.new_comptime_main_frame();
+    let mut block = comptime_main.new_block();
+
+    block.define_comptime_main_local(String::from("b"));
+
+    {
+        let mut comptime_portal = block.new_child_comptime_portal();
+        let mut block = comptime_portal.new_child_block();
+
+        {
+            let mut stack_frame = block.new_child_stack_frame();
+            let mut block = stack_frame.new_child_block();
+
+            block.define_local(String::from("a"));
+
+            {
+                let mut stack_frame = block.new_child_stack_frame();
+                let mut block = stack_frame.new_child_block();
+
+                block.define_comptime_main_local(String::from("c"));
+
+                let result = block.access_local("c");
+
+                // assert!(matches!(result, Ok(NameRef::Local(_))));
+                assert!(matches!(result, Ok(NameRef::ComptimeExport(_))));
+            }
+        }
     }
-*/
-
-/*
-    @val b = 42
-
-    @(a) { // capture b
-      a // local
-      b // local
-    }
-*/
-
-/*
-    @val b = 42
-
-    @(a) {
-      @val c = 42
-
-      c // error
-    }
-*/
+}

@@ -7,13 +7,7 @@ pub trait Scope {
     fn access_name(&mut self, name: &str, export_comptime: bool) -> Result<NameRef, NameAccessError>;
 }
 
-// pub enum ComptimeNameRef {
-//     /// The name is a global which can be loaded directly from the globals
-//     Global(GlobalRef),
-//
-//     /// The name is defined in a parent stack frame
-//     Local(StackFrameLocalRef)
-// }
+
 
 #[derive(Debug, PartialEq)]
 pub enum NameRef {
@@ -54,6 +48,10 @@ impl RootScope {
             comptime_exports: Vec::new()
         }
     }
+
+    pub fn new_comptime_main_frame(&mut self) -> ComptimeMainStackFrame {
+        ComptimeMainStackFrame::new(self)
+    }
 }
 
 impl Scope for RootScope {
@@ -73,8 +71,7 @@ impl Scope for RootScope {
         ComptimeExportRef { i }
     }
 
-    fn access_name(&mut self, name: &str, export_comptime: bool) -> Result<NameRef, NameAccessError> {
-        // todo!("Find locals depending on if we're in comptime or not")
+    fn access_name(&mut self, _name: &str, _export_comptime: bool) -> Result<NameRef, NameAccessError> {
         Err(NameAccessError::NameNotFound)
     }
 }
@@ -105,6 +102,10 @@ impl <'a> ComptimeMainStackFrame<'a> {
             locals: Vec::new(),
             exports: Vec::new()
         }
+    }
+
+    pub fn new_block(&mut self) -> BlockScope {
+        BlockScope::new(self)
     }
 }
 
@@ -152,6 +153,10 @@ impl <'a> StackFrame<'a> {
             captures: Vec::new(),
             locals: Vec::new()
         }
+    }
+
+    pub fn new_child_block(&mut self) -> BlockScope {
+        BlockScope::new(self)
     }
 }
 
@@ -218,6 +223,18 @@ impl <'a> BlockScope<'a> {
         }
     }
 
+    pub fn new_child_block(&mut self) -> BlockScope {
+        BlockScope::new(self)
+    }
+
+    pub fn new_child_stack_frame(&mut self) -> StackFrame {
+        StackFrame::new(self)
+    }
+
+    pub fn new_child_comptime_portal(&'a mut self) -> ComptimePortal<'a> {
+        ComptimePortal::new(self)
+    }
+
     pub fn define_local(&mut self, name: String) -> StackFrameLocalRef {
         let stack_ref = self.parent.define_stack_frame_local();
 
@@ -234,8 +251,6 @@ impl <'a> BlockScope<'a> {
         comptime_main_stack_ref
     }
 
-    // TODO: Logic:
-    //   - When accessing @val from runtime code -> create a slot and provide that slot as result
     pub fn access_local(&mut self, name: &str) -> Result<NameRef, NameAccessError> {
         // By default, code is runtime, so we need to access comptime vals through exports.
         // However, If we pass through a ComptimePortal, then this will get changed to `false`.
@@ -256,9 +271,6 @@ impl <'a> Scope for BlockScope<'a> {
         self.parent.define_comptime_export()
     }
 
-    // TODO: Logic:
-    //   - When accessing val from runtime code -> return it
-    //   - When accessing val from comptime code -> error
     fn access_name(&mut self, name: &str, export_comptime: bool) -> Result<NameRef, NameAccessError> {
         let mut local = None;
         for (i, (local_name, stack_ref)) in self.names.iter().enumerate() {
@@ -270,7 +282,7 @@ impl <'a> Scope for BlockScope<'a> {
 
         match local {
             None => self.parent.access_name(name, export_comptime),
-            Some((i, BlockNameRef::Local(local_ref))) => Ok(NameRef::Local(local_ref)),
+            Some((_, BlockNameRef::Local(local_ref))) => Ok(NameRef::Local(local_ref)),
             Some((i, BlockNameRef::Comptime((local_ref, export_ref)))) => {
                 if export_comptime {
                     if let Some(export_ref) = export_ref {
@@ -282,8 +294,6 @@ impl <'a> Scope for BlockScope<'a> {
                         let _ = std::mem::replace(&mut self.names[i], (String::from(name), new_value));
 
                         Ok(NameRef::ComptimeExport(export_ref))
-
-                        // todo!("Define export slot, update the ref to specify it")
                     }
                 } else {
                     Ok(NameRef::ComptimeLocal(local_ref))
@@ -359,6 +369,10 @@ impl <'a> ComptimePortal<'a> {
     pub fn new(parent: &'a mut BlockScope<'a>) -> Self {
         ComptimePortal { parent }
     }
+
+    pub fn new_child_block(&mut self) -> BlockScope {
+        BlockScope::new(self)
+    }
 }
 
 impl <'a> Scope for ComptimePortal<'a> {
@@ -374,15 +388,9 @@ impl <'a> Scope for ComptimePortal<'a> {
         self.parent.define_comptime_export()
     }
 
-    // TODO: Logic
-    //   - When accessing a var above - it needs to be comptime local
-    fn access_name(&mut self, name: &str, export_comptime: bool) -> Result<NameRef, NameAccessError> {
-        // match self.parent.access_comptime_name(name)? {
-        //     ComptimeNameRef::Global(global_ref) => Ok(NameRef::Global(global_ref)),
-        //     ComptimeNameRef::Local(local_ref) => Ok(NameRef::Local(local_ref))
-        // }
-
+    fn access_name(&mut self, name: &str, _export_comptime: bool) -> Result<NameRef, NameAccessError> {
         let parent_ref = self.parent.access_name(name, false)?;
+
         match parent_ref {
             NameRef::Global(global_ref) => Ok(NameRef::Global(global_ref)),
             NameRef::ComptimeExport(_) => todo!("This shouldn't happen"),
@@ -407,10 +415,10 @@ struct StackFrameLocal {
 #[derive(Debug, PartialEq)]
 pub struct Capture {
     /// The local to capture from the parent stack frame
-    from: StackFrameLocalRef,
+    pub from: StackFrameLocalRef,
 
     /// The local of the child stack frame to put the captured value in
-    to: StackFrameLocalRef
+    pub to: StackFrameLocalRef
 }
 
 struct ComptimeExportSlot {}
