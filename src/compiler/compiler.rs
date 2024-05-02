@@ -1,12 +1,6 @@
-// use std::collections::hash_map::ValuesMut;
-// use crate::compiler::lexical_scope::{BlockScope, FnScope, LexicalScope, LocalSlotRef, RootScope};
+// use crate::compiler::lexical_scope::{BlockScope, FnScope, LexicalScope, LocalSlotRef, RootScope, SlotRef};
 // use crate::compiler::{lir, mir};
 // use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue};
-//
-// // pub struct ModuleCompiler {
-// //     // functions: HashMap<String, Function>
-// //     function_templates: Vec<FunctionTemplate>
-// // }
 //
 // pub enum CompileError {}
 //
@@ -88,10 +82,8 @@
 //         &mut self,
 //         scope: &mut BlockScope,
 //         ast: AST
-//
-//     // This is None if there is no value at runtime, the value is added to the
-//     // compile-time code portion of the module
 //     ) -> Result<CompileASTResult, CompileError> {
+//         let location = ast.location;
 //         let node = match ast.value {
 //             ASTValue::Literal(ASTLiteral::Bool(value)) => mir::Node::LiteralI32(if value { 1 } else { 0 }),
 //             ASTValue::Literal(ASTLiteral::Int(value)) => mir::Node::LiteralI64(value),
@@ -136,42 +128,74 @@
 //                 // }
 //             },
 //
+//             // TODO: Support rec val
 //             ASTValue::Let { name, value, recursive } => {
 //                 let value_mir = self.compile_ast(scope, *value)?;
 //
 //                 match value_mir {
-//                     CompileASTResult::CompileTimeValue(local_ref) => {
+//                     CompileASTResult::CompileTimeValue(_) => {
 //                         // The val is a compile-time one
 //                         // val a = @expr
-//                         // let compile_time_local_slot_ref = self.compile_time_scope.define_name(String::from(&*name));
-//                         // scope.define_compile_time_name(name.into_string(), compile_time_local_slot_ref);
-//                         //
-//                         // self.compile_time_main.push(mir::MIR {
-//                         //     node: mir::Node::LocalSet(compile_time_local_slot_ref, )
-//                         // })
-//                         return Ok(CompileASTResult::CompileTimeValue(local_ref))
+//                         // So nothing to do here for now, when someone uses this val in a runtime
+//                         // context - it will be loaded then.
+//                         mir::Node::Block(vec![])
 //                     }
 //
 //                     CompileASTResult::RunTimeValue(mir) => {
-//                         let slot_ref = scope.define_name(name.into_string());
+//                         let slot_ref = scope.define_name(Some(name.into_string()));
 //
 //                         mir::Node::LocalSet(slot_ref, Box::new(mir))
 //                     }
 //                 }
 //             },
 //
-//             ASTValue::NameRef(_) => {}
+//             ASTValue::NameRef(name) => {
+//                 let name_ref = scope.access_name(name.borrow());
+//
+//                 match name_ref {
+//                     None => todo!("Compile error - name not found"),
+//                     Some(SlotRef::CompileTime(comptime_slot_ref)) => mir::Node::CompileTimeRef(comptime_slot_ref),
+//                     Some(SlotRef::CompileTimeLocal(local_ref)) => {
+//                         // Let the scope know that we've already exported this - further loads
+//                         // will fall in the case above
+//                         let comptime_slot_ref = scope.define_compile_time_export_name(name.into_string());
+//
+//                         let load_local = mir::MIR {
+//                             node: mir::Node::LocalGet(local_ref),
+//                             location: location.clone()
+//                         };
+//
+//                         let copy_local_to_slot = mir::Node::CompileTimeSet(
+//                             comptime_slot_ref,
+//                             Box::new(load_local)
+//                         );
+//
+//                         self.compile_time_main.push(mir::MIR {
+//                             node: copy_local_to_slot,
+//                             location: location.clone()
+//                         });
+//
+//                         mir::Node::CompileTimeRef(comptime_slot_ref)
+//                     },
+//                     Some(SlotRef::Global(global_slot_ref)) => mir::Node::GlobalRef(global_slot_ref),
+//                     Some(SlotRef::Local(local_ref)) => mir::Node::LocalGet(local_ref),
+//                 }
+//             },
 //
 //             ASTValue::Function(_) => {}
 //             ASTValue::Call { .. } => {}
 //
 //             ASTValue::FnType { .. } => {}
 //             ASTValue::TypeAssert { .. } => {}
+//
+//             ASTValue::CompileTimeExpr(ast) => {
+//                 let mir = self.compile_ast()
+//             }
 //         };
 //
 //         Ok(Some(mir::MIR {
 //             node,
-//             location: ast.location
+//             location
 //         }))
 //     }
 // }
