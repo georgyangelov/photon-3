@@ -16,7 +16,7 @@ fn test_root_level_locals() {
     let local_ref = block.define_local(String::from("a"));
     let result = block.access_local("a");
 
-    assert_eq!(result, Ok(NameRef::Local(local_ref)))
+    assert_eq!(result, Ok(AccessNameRef::Local(local_ref)))
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn test_defining_comptime_vals_at_root() {
 
     let result = block.access_local("a");
 
-    assert!(matches!(result, Ok(NameRef::ComptimeExport(_))))
+    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))))
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_using_comptime_vals_from_comptime_block() {
 
     let result = block.access_local("a");
 
-    assert_eq!(result, Ok(NameRef::Local(comptime_local_ref)))
+    assert_eq!(result, Ok(AccessNameRef::Local(comptime_local_ref)))
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn test_using_comptime_vals_from_runtime_block() {
 
     let result = block.access_local("a");
 
-    assert!(matches!(result, Ok(NameRef::ComptimeExport(_))))
+    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))))
 }
 
 #[test]
@@ -216,7 +216,7 @@ fn test_captures_comptime_local_in_comptime_fn() {
 
             let result = block.access_local("a");
 
-            assert!(matches!(result, Ok(NameRef::Local(_))));
+            assert!(matches!(result, Ok(AccessNameRef::Local(_))));
 
             match stack_frame.captures.get(0) {
                 None => panic!("Expected to have a capture"),
@@ -259,7 +259,7 @@ fn test_capture_nested_fns_in_comptime() {
 
                 let result = block.access_local("a");
 
-                assert!(matches!(result, Ok(NameRef::Local(_))));
+                assert!(matches!(result, Ok(AccessNameRef::Local(_))));
 
                 match stack_frame.captures.get(0) {
                     None => panic!("Expected to have a capture"),
@@ -315,7 +315,7 @@ fn test_use_comptime_in_another_comptime_fn() {
                 let result = block.access_local("c");
 
                 // assert!(matches!(result, Ok(NameRef::Local(_))));
-                assert!(matches!(result, Ok(NameRef::ComptimeExport(_))));
+                assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))));
             }
         }
     }

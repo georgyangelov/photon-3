@@ -51,10 +51,16 @@ impl <'a> BlockScope<'a> {
         comptime_main_stack_ref
     }
 
-    pub fn access_local(&mut self, name: &str) -> Result<NameRef, NameAccessError> {
+    pub fn access_local(&mut self, name: &str) -> Result<AccessNameRef, NameAccessError> {
         // By default, code is runtime, so we need to access comptime vals through exports.
         // However, If we pass through a ComptimePortal, then this will get changed to `false`.
-        self.access_name(name, true)
+        match self.access_name(name, true) {
+            Ok(NameRef::Global(global_ref)) => Ok(AccessNameRef::Global(global_ref)),
+            Ok(NameRef::ComptimeExport(export_ref)) => Ok(AccessNameRef::ComptimeExport(export_ref)),
+            Ok(NameRef::ComptimeLocal(_)) => panic!("Got comptime local from call to access_name with export_comptime = true"),
+            Ok(NameRef::Local(local_ref)) => Ok(AccessNameRef::Local(local_ref)),
+            Err(error) => Err(error)
+        }
     }
 }
 
@@ -101,4 +107,18 @@ impl <'a> LexicalScope for BlockScope<'a> {
             },
         }
     }
+}
+
+/// This is the same as NameRef from LexicalScope but without the ComptimeLocal, since that is
+/// not possible to return from BlockScope::access_local
+#[derive(Debug, PartialEq)]
+pub enum AccessNameRef {
+    /// The name is a global which can be loaded directly from the globals
+    Global(GlobalRef),
+
+    /// The name is a compile-time export which can be loaded from the rodata section
+    ComptimeExport(ComptimeExportRef),
+
+    /// The name is defined in a parent stack frame
+    Local(StackFrameLocalRef)
 }
