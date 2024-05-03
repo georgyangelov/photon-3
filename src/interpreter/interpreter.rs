@@ -1,11 +1,12 @@
-use crate::compiler::mir::{FrameLayout, Function, Node};
+use crate::compiler::mir::{Function, Node};
 use crate::compiler::{mir, Module};
 use crate::interpreter::interpreter::FunctionToCall::{Photon, Rust};
 use crate::interpreter::Value;
 
 pub struct Interpreter {
     stack: Vec<Value>,
-    stack_offset: usize
+    stack_offset: usize,
+    current_frame_size: usize
 }
 
 impl Interpreter {
@@ -15,16 +16,18 @@ impl Interpreter {
 
         Self {
             stack,
-            stack_offset: 0
+            stack_offset: 0,
+            current_frame_size: 0
         }
     }
 
     pub fn eval_module(&mut self, module: Module) -> Value {
         let main = module.runtime_main;
 
-        self.push_stack_for_call(0, &main, vec![]);
+        let current_frame_size = self.current_frame_size;
+        self.push_stack_for_call(current_frame_size, &main, vec![]);
         let result = self.eval_mir(&main.body);
-        self.pop_stack_after_call(0);
+        self.pop_stack_after_call(current_frame_size);
 
         result
     }
@@ -74,7 +77,14 @@ impl Interpreter {
                 match func {
                     None => todo!("Error handling - could not find function"),
                     Some(Rust(rust_fn)) => rust_fn(arg_values),
-                    Some(Photon(photon_fn)) => todo!("Call photon function"),
+                    Some(Photon(photon_fn)) => {
+                        let current_frame_size = self.current_frame_size;
+                        self.push_stack_for_call(current_frame_size, &photon_fn, arg_values);
+                        let result = self.eval_mir(&photon_fn.body);
+                        self.pop_stack_after_call(current_frame_size);
+
+                        result
+                    },
                 }
             },
         }
@@ -90,36 +100,40 @@ impl Interpreter {
                     _ => None
                 }
             }
-            Value::F64(_) => None
+            Value::F64(_) => None,
+            Value::Closure(_) => todo!("Support closures")
         }
     }
 
     #[inline]
     fn push_stack_for_call(
         &mut self,
-        current_frame_size: usize,
+        parent_frame_size: usize,
         target_func: &Function,
         args: Vec<Value>,
     ) {
-        if self.stack_offset + current_frame_size + target_func.frame_layout.size >= self.stack.len() {
+        if self.stack_offset + parent_frame_size + target_func.frame_layout.size >= self.stack.len() {
             panic!("Stack overflow");
         }
 
         for (i, arg) in args.into_iter().enumerate() {
-            self.stack[self.stack_offset + current_frame_size + i] = arg;
+            self.stack[self.stack_offset + parent_frame_size + i] = arg;
         }
 
-        for capture in &target_func.captures {
-            self.stack[self.stack_offset + current_frame_size + capture.to.i] =
-                self.stack[self.stack_offset + capture.from.i].clone();
-        }
+        // TODO: This is not correct - we need to capture from the definition scope, not the
+        //       call stack
+        // for capture in &target_func.captures {
+        //     self.stack[self.stack_offset + parent_frame_size + capture.to.i] =
+        //         self.stack[self.stack_offset + capture.from.i].clone();
+        // }
 
-        self.stack_offset += current_frame_size
+        self.stack_offset += parent_frame_size;
+        self.current_frame_size = target_func.frame_layout.size;
     }
 
     #[inline]
-    fn pop_stack_after_call(&mut self, current_frame_size: usize) {
-        self.stack_offset -= current_frame_size
+    fn pop_stack_after_call(&mut self, parent_frame_size: usize) {
+        self.stack_offset -= parent_frame_size
     }
 }
 

@@ -1,12 +1,14 @@
 use crate::compiler::lexical_scope::{Capture, ComptimeExportRef, GlobalRef, StackFrameLocalRef};
 use crate::frontend::Location;
 
+#[derive(Debug)]
 pub struct MIR {
     pub node: Node,
     // pub typ: ComptimeExportRef,
     pub location: Location
 }
 
+#[derive(Debug)]
 pub enum Node {
     Nop,
 
@@ -35,6 +37,7 @@ pub struct FunctionTemplate {
     pub body: MIR
 }
 
+#[derive(Debug)]
 pub struct Function {
     // pub param_types: Vec<ComptimeExportRef>,
     pub frame_layout: FrameLayout,
@@ -43,6 +46,7 @@ pub struct Function {
     // pub return_type: ComptimeExportRef
 }
 
+#[derive(Debug)]
 pub struct FrameLayout {
     pub size: usize
 }

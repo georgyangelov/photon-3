@@ -175,6 +175,7 @@ impl ModuleCompiler {
             },
 
             ASTValue::Function(_) => todo!("Support fn definitions"),
+
             ASTValue::Call { name, target, args } => {
                 let (target_mir, name) = match target {
                     None => {

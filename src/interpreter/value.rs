@@ -1,4 +1,7 @@
-#[derive(Clone, PartialEq, Debug)]
+use std::rc::Rc;
+use crate::compiler::mir::Function;
+
+#[derive(Clone, Debug)]
 pub enum Value {
     None,
 
@@ -7,9 +10,19 @@ pub enum Value {
     I64(i64),
     F64(f64),
 
+    Closure(Rc<Closure>)
+
     // String(String),
 
     // Struct()
+}
+
+#[derive(Debug)]
+pub struct Closure {
+    pub values: Vec<Value>,
+
+    // TODO: Should actually be FunctionRef
+    pub function: Function
 }
 
 impl Value {
