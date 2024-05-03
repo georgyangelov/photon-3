@@ -339,7 +339,8 @@ fn test_compile_time_expressions() {
 
 #[test]
 fn test_compile_time_vals() {
-    assert_parse("@val a = 42", "(@let a 42)")
+    assert_parse("@val a = 42", "(@let a 42)");
+    assert_parse("@rec val a = 42", "(@let-rec a 42)");
 }
 
 fn assert_parse(code: &str, expected: &str) {
