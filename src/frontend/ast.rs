@@ -22,7 +22,8 @@ pub enum ASTValue {
     Let {
         name: Box<str>,
         value: Box<AST>,
-        recursive: bool
+        recursive: bool,
+        comptime: bool
     },
     NameRef(Box<str>),
 

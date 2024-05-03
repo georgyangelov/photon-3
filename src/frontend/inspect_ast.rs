@@ -63,11 +63,17 @@ impl Display for ASTValue {
                 write!(f, ")")
             }
 
-            ASTValue::Let { name, value, recursive } => {
+            ASTValue::Let { name, value, recursive, comptime } => {
+                write!(f, "(")?;
+
+                if *comptime {
+                    write!(f, "@")?;
+                }
+
                 if *recursive {
-                    write!(f, "(let-rec {} {})", name, value)
+                    write!(f, "let-rec {} {})", name, value)
                 } else {
-                    write!(f, "(let {} {})", name, value)
+                    write!(f, "let {} {})", name, value)
                 }
             }
 

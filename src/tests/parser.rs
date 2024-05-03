@@ -337,6 +337,11 @@ fn test_compile_time_expressions() {
     assert_parse("@method.call 1 + 1", "@(call method (+ 1 1))");
 }
 
+#[test]
+fn test_compile_time_vals() {
+    assert_parse("@val a = 42", "(@let a 42)")
+}
+
 fn assert_parse(code: &str, expected: &str) {
     let result = parse(code).expect(format!("Could not parse code {}", code).as_str());
 

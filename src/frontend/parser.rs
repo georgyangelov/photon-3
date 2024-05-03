@@ -138,15 +138,23 @@ impl <I: Iterator<Item = char>> Parser<I> {
     fn parse_primary(&mut self, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
         // TODO: Check if this allows to have `-val a = 42` which should be invalid
         if self.t.value == Recursive || self.t.value == Val {
-            return self.parse_val(require_call_parens, has_lower_priority_target);
+            let start_loc = self.t.location.clone();
+
+            return self.parse_val(start_loc, false, require_call_parens, has_lower_priority_target);
+        }
+
+        if self.t.value == At {
+            let at = self.read()?; // @
+
+            if self.t.value == Recursive || self.t.value == Val {
+                return self.parse_val(at.location, true, require_call_parens, has_lower_priority_target);
+            }
+
+            return self.parse_compile_time_expression(at.location, require_call_parens, has_lower_priority_target)
         }
 
         if self.t.value == Minus {
             return self.parse_unary_operator(require_call_parens, has_lower_priority_target)
-        }
-
-        if self.t.value == At {
-            return self.parse_compile_time_expression(require_call_parens, has_lower_priority_target)
         }
 
         let mut target = self.parse_call_target(require_call_parens, has_lower_priority_target)?;
@@ -162,8 +170,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         }
     }
 
-    fn parse_val(&mut self, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
-        let start_loc = self.t.location.clone();
+    fn parse_val(&mut self, start_loc: Location, comptime: bool, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
         let recursive = self.t.value == Recursive;
         if recursive {
             self.read()?; // rec
@@ -222,7 +229,8 @@ impl <I: Iterator<Item = char>> Parser<I> {
             value: ASTValue::Let {
                 name,
                 value: Box::new(value_with_type),
-                recursive
+                recursive,
+                comptime
             },
             location: start_loc.extend(&self.last_location)
         }))
@@ -237,7 +245,11 @@ impl <I: Iterator<Item = char>> Parser<I> {
             &Name(_) => self.parse_name(),
 
             &OpenBrace => self.parse_lambda_or_lambda_type(has_lower_priority_target),
-            &At => self.parse_compile_time_expression(require_call_parens, has_lower_priority_target),
+            &At => {
+                let at = self.read()?; // @
+
+                self.parse_compile_time_expression(at.location, require_call_parens, has_lower_priority_target)
+            },
 
             &Not => self.parse_unary_operator(require_call_parens, has_lower_priority_target),
 
@@ -247,15 +259,18 @@ impl <I: Iterator<Item = char>> Parser<I> {
         }
     }
 
-    fn parse_compile_time_expression(&mut self, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
-        let at = self.read()?; // @
-
+    fn parse_compile_time_expression(
+        &mut self,
+        start_loc: Location,
+        require_call_parens: bool,
+        has_lower_priority_target: bool
+    ) -> Result<ASTOrPattern, ParseError> {
         let expr = self.parse_primary(require_call_parens, has_lower_priority_target)?;
         let expr = Self::assert_ast(expr)?;
 
         Ok(ASTOrPattern::AST(AST {
             value: ASTValue::CompileTimeExpr(Box::new(expr)),
-            location: at.location.extend(&self.last_location)
+            location: start_loc.extend(&self.last_location)
         }))
     }
 
