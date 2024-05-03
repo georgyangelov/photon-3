@@ -10,7 +10,7 @@ pub struct StackFrame {
     pub locals: Vec<StackFrameLocal>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Capture {
     /// The local to capture from the parent stack frame
     pub from: StackFrameLocalRef,

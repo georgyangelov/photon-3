@@ -62,6 +62,26 @@ fn test_defining_photon_functions() {
     ", Value::I64(42))
 }
 
+#[test]
+fn test_closures() {
+    expect!("
+        val a = 41
+        val fn = (b) a + b
+
+        fn(1)
+    ", Value::I64(42))
+}
+
+#[test]
+fn test_closures_2() {
+    expect!("
+        val add_fn = (a) { (b) a + b }
+        val add_one = add_fn(1)
+
+        add_one(41)
+    ", Value::I64(42))
+}
+
 // fn expect(code: &str, expected: Value) {
 //     expect!(run(code), expected)
 // }
@@ -72,7 +92,7 @@ fn run(code: &str) -> Value {
 
     let mut interpreter = Interpreter::new();
 
-    interpreter.eval_module(module)
+    interpreter.eval_module(&module)
 }
 
 fn parse(code: &str) -> Result<AST, ParseError> {

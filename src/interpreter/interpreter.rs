@@ -1,7 +1,8 @@
+use std::rc::Rc;
 use crate::compiler::mir::{Function, Node};
 use crate::compiler::{mir, Module};
-use crate::interpreter::interpreter::FunctionToCall::{Photon, Rust};
-use crate::interpreter::Value;
+use crate::interpreter::{Closure, Value};
+use std::borrow::Borrow;
 
 pub struct Interpreter {
     stack: Vec<Value>,
@@ -21,18 +22,18 @@ impl Interpreter {
         }
     }
 
-    pub fn eval_module(&mut self, module: Module) -> Value {
-        let main = module.runtime_main;
+    pub fn eval_module(&mut self, module: &Module) -> Value {
+        let main = &module.runtime_main;
 
         let current_frame_size = self.current_frame_size;
-        self.push_stack_for_call(current_frame_size, &main, vec![]);
-        let result = self.eval_mir(&main.body);
+        self.push_stack_for_call(current_frame_size, main, vec![], &[]);
+        let result = self.eval_mir(module, &main.body);
         self.pop_stack_after_call(current_frame_size);
 
         result
     }
 
-    fn eval_mir(&mut self, mir: &mir::MIR) -> Value {
+    fn eval_mir(&mut self, module: &Module, mir: &mir::MIR) -> Value {
         match &mir.node {
             Node::Nop => Value::None,
 
@@ -46,7 +47,7 @@ impl Interpreter {
             Node::LiteralF64(value) => Value::F64(*value),
 
             Node::LocalSet(local_ref, mir) => {
-                self.stack[self.stack_offset + local_ref.i] = self.eval_mir(mir);
+                self.stack[self.stack_offset + local_ref.i] = self.eval_mir(module, mir);
 
                 Value::None
             },
@@ -56,37 +57,55 @@ impl Interpreter {
                 let mut result = Value::None;
 
                 for mir in mirs {
-                    result = self.eval_mir(mir);
+                    result = self.eval_mir(module, mir);
                 }
 
                 result
             },
 
             Node::Call(name, target, args) => {
-                let target = self.eval_mir(target);
+                let target = self.eval_mir(module, target);
                 let func = self.find_func(&target, name);
 
                 let mut arg_values = Vec::with_capacity(args.len() + 1);
                 arg_values.push(target);
 
                 for arg in args {
-                    let value = self.eval_mir(arg);
+                    let value = self.eval_mir(module, arg);
                     arg_values.push(value);
                 }
 
                 match func {
                     None => todo!("Error handling - could not find function"),
-                    Some(Rust(rust_fn)) => rust_fn(arg_values),
-                    Some(Photon(photon_fn)) => {
+                    Some(FunctionToCall::Rust(rust_fn)) => rust_fn(arg_values),
+                    Some(FunctionToCall::Closure(closure)) => {
+                        let func = &module.runtime_functions[closure.function_ref.i];
                         let current_frame_size = self.current_frame_size;
-                        self.push_stack_for_call(current_frame_size, &photon_fn, arg_values);
-                        let result = self.eval_mir(&photon_fn.body);
+                        let closure: &Closure = closure.borrow();
+
+                        // TODO: Better
+                        arg_values.remove(0);
+
+                        self.push_stack_for_call(current_frame_size, func, arg_values, &closure.values);
+                        let result = self.eval_mir(module, &func.body);
                         self.pop_stack_after_call(current_frame_size);
 
                         result
-                    },
+                    }
                 }
             },
+
+            Node::CreateClosure(fn_ref, local_refs) => {
+                let mut values = Vec::new();
+                for local_ref in local_refs {
+                    values.push(self.stack[self.stack_offset + local_ref.i].clone());
+                }
+
+                Value::Closure(Rc::new(Closure {
+                    values,
+                    function_ref: *fn_ref
+                }))
+            }
         }
     }
 
@@ -96,12 +115,16 @@ impl Interpreter {
             Value::I8(_) => None,
             Value::I64(_) => {
                 match name {
-                    "+" => Some(Rust(add_i64)),
+                    "+" => Some(FunctionToCall::Rust(add_i64)),
                     _ => None
                 }
             }
             Value::F64(_) => None,
-            Value::Closure(_) => todo!("Support closures")
+            Value::Closure(closure) => {
+                if name == "call" {
+                    Some(FunctionToCall::Closure(closure.clone()))
+                } else { None }
+            }
         }
     }
 
@@ -111,6 +134,7 @@ impl Interpreter {
         parent_frame_size: usize,
         target_func: &Function,
         args: Vec<Value>,
+        captures: &[Value]
     ) {
         if self.stack_offset + parent_frame_size + target_func.frame_layout.size >= self.stack.len() {
             panic!("Stack overflow");
@@ -122,10 +146,10 @@ impl Interpreter {
 
         // TODO: This is not correct - we need to capture from the definition scope, not the
         //       call stack
-        // for capture in &target_func.captures {
-        //     self.stack[self.stack_offset + parent_frame_size + capture.to.i] =
-        //         self.stack[self.stack_offset + capture.from.i].clone();
-        // }
+        for (i, capture) in target_func.captures.iter().enumerate() {
+            self.stack[self.stack_offset + parent_frame_size + capture.to.i] =
+                captures[i].clone();
+        }
 
         self.stack_offset += parent_frame_size;
         self.current_frame_size = target_func.frame_layout.size;
@@ -138,7 +162,7 @@ impl Interpreter {
 }
 
 enum FunctionToCall {
-    Photon(Function),
+    Closure(Rc<Closure>),
     Rust(fn(Vec<Value>) -> Value)
 }
 

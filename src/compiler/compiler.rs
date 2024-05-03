@@ -2,7 +2,7 @@ use crate::compiler::{mir};
 use crate::compiler::lexical_scope::{AccessNameRef, ComptimeMainStackFrame, NameAccessError, RootScope, ScopeStack};
 use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue, Location};
 use std::borrow::Borrow;
-use crate::compiler::mir::{FrameLayout, MIR};
+use crate::compiler::mir::{FrameLayout, FunctionRef, MIR};
 
 #[derive(Debug)]
 pub enum CompileError {}
@@ -17,17 +17,17 @@ pub struct ModuleCompiler {
     // pub compile_time_slots: Vec<Any>,
     // pub compile_time_functions: Vec<lir::Function>,
     // pub compile_time_scope: BlockScope<'a>,
-    pub compile_time_main: Vec<mir::MIR>,
+    pub compile_time_main: Vec<MIR>,
 
-    pub run_time_functions: Vec<mir::Function>
+    pub runtime_functions: Vec<mir::Function>
 }
 
 pub struct Module {
     // pub compile_time_functions: Vec<lir::Function>,
 
     // pub compile_time_main: lir::Function,
-    //
-    // pub run_time_functions: Vec<mir::Function>,
+
+    pub runtime_functions: Vec<mir::Function>,
     pub runtime_main: mir::Function
 }
 
@@ -51,7 +51,7 @@ impl ModuleCompiler {
         let mut builder = ModuleCompiler {
             const_strings: Vec::new(),
             compile_time_main: Vec::new(),
-            run_time_functions: Vec::new()
+            runtime_functions: Vec::new()
         };
 
         let compiled = builder.compile_function(&mut scope, module_fn)?;
@@ -59,7 +59,7 @@ impl ModuleCompiler {
         Ok(Module {
             // compile_time_functions: builder.compile_time_functions,
             // run_time_functions: builder.run_time_functions
-
+            runtime_functions: builder.runtime_functions,
             runtime_main: compiled
         })
     }
@@ -174,7 +174,20 @@ impl ModuleCompiler {
                     .map_err(|error| todo!("Compile error - name not found or something else"));
             },
 
-            ASTValue::Function(_) => todo!("Support fn definitions"),
+            ASTValue::Function(func) => {
+                let func_mir = self.compile_function(scope, func)?;
+                let func_ref = FunctionRef { i: self.runtime_functions.len() };
+                let captures = func_mir.captures.clone();
+
+                self.runtime_functions.push(func_mir);
+
+                let mut locals_to_capture = Vec::with_capacity(captures.len());
+                for capture in captures {
+                    locals_to_capture.push(capture.from);
+                }
+
+                mir::Node::CreateClosure(func_ref, locals_to_capture)
+            },
 
             ASTValue::Call { name, target, args } => {
                 let (target_mir, name) = match target {
@@ -186,7 +199,10 @@ impl ModuleCompiler {
                             Err(NameAccessError::NameNotFound) => {
                                 match Self::access_name_mir(scope, "self", location.clone()) {
                                     Ok(target_self) => (target_self, name),
-                                    Err(_) => todo!("Compile error - could not find function")
+                                    Err(_) => {
+                                        println!("{:?}", name);
+                                        todo!("Compile error - could not find function")
+                                    }
                                 }
                             },
                             Err(_) => todo!("Compile error")

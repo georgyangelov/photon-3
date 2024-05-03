@@ -343,6 +343,11 @@ fn test_compile_time_vals() {
     assert_parse("@rec val a = 42", "(@let-rec a 42)");
 }
 
+#[test]
+fn test_nested_fns() {
+    assert_parse("(a) (b) a + b", "(fn [a] (fn [b] (+ a b)))")
+}
+
 fn assert_parse(code: &str, expected: &str) {
     let result = parse(code).expect(format!("Could not parse code {}", code).as_str());
 

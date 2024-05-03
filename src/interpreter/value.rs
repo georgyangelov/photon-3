@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use crate::compiler::mir::Function;
+use crate::compiler::mir::{FunctionRef};
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -19,10 +19,8 @@ pub enum Value {
 
 #[derive(Debug)]
 pub struct Closure {
-    pub values: Vec<Value>,
-
-    // TODO: Should actually be FunctionRef
-    pub function: Function
+    pub function_ref: FunctionRef,
+    pub values: Vec<Value>
 }
 
 impl Value {

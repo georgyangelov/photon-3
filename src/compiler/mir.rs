@@ -30,7 +30,9 @@ pub enum Node {
 
     Block(Vec<MIR>),
 
-    Call(Box<str>, Box<MIR>, Vec<MIR>)
+    Call(Box<str>, Box<MIR>, Vec<MIR>),
+
+    CreateClosure(FunctionRef, Vec<StackFrameLocalRef>)
 }
 
 pub struct FunctionTemplate {
@@ -51,7 +53,7 @@ pub struct FrameLayout {
     pub size: usize
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct FunctionRef {
-    i: usize
+    pub i: usize
 }
