@@ -128,7 +128,7 @@ impl ScopeStack {
         local_ref
     }
 
-    pub fn define_comptime_local(&mut self, name: String) -> StackFrameLocalRef {
+    pub fn define_comptime_main_local(&mut self, name: String) -> StackFrameLocalRef {
         let local_ref = self.define_comptime_main_stack_frame_local();
 
         let block = match self.stack.last_mut() {

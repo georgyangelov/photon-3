@@ -39,7 +39,7 @@ fn test_defining_comptime_vals_at_root() {
 
     let mut scope = new_stack();
 
-    scope.define_comptime_local(String::from("a"));
+    scope.define_comptime_main_local(String::from("a"));
 
     let result = scope.access_local("a");
 
@@ -58,7 +58,7 @@ fn test_using_comptime_vals_from_comptime_block() {
 
     let mut scope = new_stack();
 
-    let comptime_local_ref = scope.define_comptime_local(String::from("a"));
+    let comptime_local_ref = scope.define_comptime_main_local(String::from("a"));
 
     scope.push_comptime_portal();
     scope.push_block();
@@ -80,7 +80,7 @@ fn test_using_comptime_vals_from_runtime_block() {
 
     let mut scope = new_stack();
 
-    scope.define_comptime_local(String::from("a"));
+    scope.define_comptime_main_local(String::from("a"));
 
     scope.push_block();
 
@@ -103,7 +103,7 @@ fn test_reuses_comptime_slots() {
 
     let mut scope = new_stack();
 
-    scope.define_comptime_local(String::from("a"));
+    scope.define_comptime_main_local(String::from("a"));
 
     let result_1 = scope.access_local("a");
 
@@ -177,7 +177,7 @@ fn test_captures_comptime_local_in_comptime_fn() {
 
     let mut scope = new_stack();
 
-    let from_ref = scope.define_comptime_local(String::from("a"));
+    let from_ref = scope.define_comptime_main_local(String::from("a"));
 
     {
         scope.push_comptime_portal();
@@ -268,7 +268,7 @@ fn test_use_comptime_in_another_comptime_fn() {
 
     let mut scope = new_stack();
 
-    scope.define_comptime_local(String::from("b"));
+    scope.define_comptime_main_local(String::from("b"));
 
     {
         scope.push_comptime_portal();
@@ -284,7 +284,7 @@ fn test_use_comptime_in_another_comptime_fn() {
                 scope.push_stack_frame();
                 scope.push_block();
 
-                scope.define_comptime_local(String::from("c"));
+                scope.define_comptime_main_local(String::from("c"));
 
                 let result = scope.access_local("c");
 
