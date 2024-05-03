@@ -48,6 +48,28 @@ impl <I: Iterator<Item = char>> Parser<I> {
         }
     }
 
+    pub fn read_all_as_block(&mut self) -> Result<AST, ParseError> {
+        let mut asts = Vec::new();
+
+        while self.has_next()? {
+            let ast = self.next(false)?;
+
+            asts.push(ast);
+        }
+
+        let location =
+            if asts.len() > 0 {
+                asts[0].location.extend(&asts[asts.len() - 1].location)
+            } else {
+                panic!("Nothing to read")
+            };
+
+        Ok(AST {
+            value: ASTValue::Block(asts),
+            location
+        })
+    }
+
     pub fn has_next(&mut self) -> Result<bool, ParseError> {
         if self.at_start { self.read()?; }
 

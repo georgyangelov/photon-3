@@ -17,10 +17,10 @@ pub struct StackFrameLocal {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct GlobalRef { i: usize }
+pub struct GlobalRef { pub i: usize }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct ComptimeExportRef { i: usize }
+pub struct ComptimeExportRef { pub i: usize }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct StackFrameLocalRef { i: usize }
+pub struct StackFrameLocalRef { pub i: usize }

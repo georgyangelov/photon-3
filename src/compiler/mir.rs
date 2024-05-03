@@ -36,10 +36,15 @@ pub struct FunctionTemplate {
 }
 
 pub struct Function {
-    pub param_types: Vec<ComptimeExportRef>,
+    // pub param_types: Vec<ComptimeExportRef>,
+    pub frame_layout: FrameLayout,
     pub captures: Vec<Capture>,
     pub body: MIR,
-    pub return_type: ComptimeExportRef
+    // pub return_type: ComptimeExportRef
+}
+
+pub struct FrameLayout {
+    pub size: usize
 }
 
 #[derive(Copy, Clone)]

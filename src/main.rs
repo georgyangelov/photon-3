@@ -10,6 +10,7 @@ use runtime::Position;
 mod frontend;
 mod tests;
 mod compiler;
+mod interpreter;
 
 fn main() {
     let engine = Engine::default();

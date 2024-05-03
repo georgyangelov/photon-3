@@ -1,8 +1,10 @@
 use crate::compiler::{mir};
-use crate::compiler::lexical_scope::{AccessNameRef, BlockScope, ComptimeMainStackFrame, ComptimePortal, RootScope, ScopeStack, StackFrame};
+use crate::compiler::lexical_scope::{AccessNameRef, ComptimeMainStackFrame, RootScope, ScopeStack};
 use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue};
 use std::borrow::Borrow;
+use crate::compiler::mir::FrameLayout;
 
+#[derive(Debug)]
 pub enum CompileError {}
 
 struct FunctionTemplate {
@@ -26,11 +28,11 @@ pub struct Module {
     // pub compile_time_main: lir::Function,
     //
     // pub run_time_functions: Vec<mir::Function>,
-    // pub run_time_main: mir::Function
+    pub runtime_main: mir::Function
 }
 
 impl ModuleCompiler {
-    fn compile_module(ast: AST) -> Result<Module, CompileError> {
+    pub fn compile_module(ast: AST) -> Result<Module, CompileError> {
         // The module is an implicit function, it's executed like one
         let module_fn = ASTFunction {
             params: Vec::new(),
@@ -57,6 +59,8 @@ impl ModuleCompiler {
         Ok(Module {
             // compile_time_functions: builder.compile_time_functions,
             // run_time_functions: builder.run_time_functions
+
+            runtime_main: compiled
         })
     }
 
@@ -78,10 +82,11 @@ impl ModuleCompiler {
         let stack_frame = scope.pop_stack_frame();
 
         Ok(mir::Function {
-            param_types: todo!(),
+            frame_layout: FrameLayout {
+                size: stack_frame.locals.len()
+            },
             captures: stack_frame.captures,
-            body,
-            return_type: todo!(),
+            body
         })
     }
 
