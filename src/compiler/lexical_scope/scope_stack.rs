@@ -101,13 +101,23 @@ impl ScopeStack {
     }
 
     pub fn define_stack_frame_local(&mut self) -> StackFrameLocalRef {
+        let mut should_define_in_comptime_main = false;
+
         for i in (0..self.stack.len()).rev() {
             match &mut self.stack[i] {
                 Scope::RootScope(_) => {},
-                Scope::ComptimeMainFrame(frame) => return frame.define_stack_frame_local(),
-                Scope::StackFrame(frame) => return frame.define_stack_frame_local(),
+                Scope::ComptimeMainFrame(frame) => {
+                    if should_define_in_comptime_main {
+                        return frame.define_stack_frame_local()
+                    }
+                },
+                Scope::StackFrame(frame) => {
+                    if !should_define_in_comptime_main {
+                        return frame.define_stack_frame_local()
+                    }
+                },
                 Scope::BlockScope(_) => {}
-                Scope::ComptimePortal(_) => {}
+                Scope::ComptimePortal(_) => should_define_in_comptime_main = true
             }
         }
 

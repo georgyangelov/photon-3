@@ -7,7 +7,7 @@ pub struct StackFrame {
     pub captures: Vec<Capture>,
 
     /// The local stack frame slots
-    locals: Vec<StackFrameLocal>,
+    pub locals: Vec<StackFrameLocal>,
 }
 
 #[derive(Debug, PartialEq)]

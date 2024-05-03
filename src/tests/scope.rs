@@ -47,6 +47,37 @@ fn test_defining_comptime_vals_at_root() {
 }
 
 #[test]
+fn test_defining_vals_at_comptime_block() {
+    /*
+        @(
+            val a = 42
+
+            a // comptime main local
+        )
+     */
+
+    let mut scope = new_stack();
+
+    scope.push_comptime_portal();
+    scope.push_block();
+
+    let local_ref = scope.define_local(String::from("a"));
+    let result = scope.access_local("a");
+
+    assert_eq!(result, Ok(AccessNameRef::Local(local_ref)));
+
+    scope.pop_block();
+    scope.pop_comptime_portal();
+
+    scope.pop_block(); // Main block
+    let runtime_frame = scope.pop_stack_frame(); // Main runtime frame
+    let comptime_frame = scope.pop_comptime_main_stack_frame();
+
+    assert_eq!(runtime_frame.locals.len(), 0);
+    assert_eq!(comptime_frame.locals.len(), 1);
+}
+
+#[test]
 fn test_using_comptime_vals_from_comptime_block() {
     /*
         @val a = 42

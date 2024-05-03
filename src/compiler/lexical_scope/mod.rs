@@ -12,7 +12,7 @@ pub use block_scope::*;
 pub use comptime_portal::*;
 pub use scope_stack::*;
 
-struct StackFrameLocal {
+pub struct StackFrameLocal {
     // TODO: Include an optional name, for debugging purposes
 }
 
