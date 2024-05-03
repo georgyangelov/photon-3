@@ -10,7 +10,8 @@ fn test_root_level_locals() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     let local_ref = block.define_local(String::from("a"));
     let result = block.access_local("a");
@@ -26,7 +27,8 @@ fn test_missing_local() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     let result = block.access_local("a");
 
@@ -43,7 +45,8 @@ fn test_defining_comptime_vals_at_root() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     block.define_comptime_main_local(String::from("a"));
 
@@ -64,7 +67,8 @@ fn test_using_comptime_vals_from_comptime_block() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     let comptime_local_ref = block.define_comptime_main_local(String::from("a"));
 
@@ -88,7 +92,8 @@ fn test_using_comptime_vals_from_runtime_block() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     block.define_comptime_main_local(String::from("a"));
 
@@ -113,7 +118,8 @@ fn test_reuses_comptime_slots() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     block.define_comptime_main_local(String::from("a"));
 
@@ -136,7 +142,8 @@ fn test_cannot_reference_runtime_vals_from_comptime() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     block.define_local(String::from("a"));
 
@@ -160,7 +167,8 @@ fn test_cannot_reference_runtime_vals_from_comptime_nested() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     {
         let mut comptime_portal = block.new_child_comptime_portal();
@@ -193,7 +201,8 @@ fn test_captures_comptime_local_in_comptime_fn() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     let from_ref = block.define_comptime_main_local(String::from("a"));
 
@@ -231,7 +240,8 @@ fn test_capture_nested_fns_in_comptime() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     {
         let mut comptime_portal = block.new_child_comptime_portal();
@@ -281,7 +291,8 @@ fn test_use_comptime_in_another_comptime_fn() {
 
     let mut root = RootScope::new();
     let mut comptime_main = root.new_comptime_main_frame();
-    let mut block = comptime_main.new_block();
+    let mut runtime_main = comptime_main.new_runtime_main_frame();
+    let mut block = runtime_main.new_child_block();
 
     block.define_comptime_main_local(String::from("b"));
 

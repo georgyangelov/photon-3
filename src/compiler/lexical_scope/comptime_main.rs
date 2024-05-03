@@ -29,6 +29,10 @@ impl <'a> ComptimeMainStackFrame<'a> {
     pub fn new_block(&mut self) -> BlockScope {
         BlockScope::new(self)
     }
+
+    pub fn new_runtime_main_frame(&mut self) -> StackFrame {
+        StackFrame::new(self)
+    }
 }
 
 impl <'a> LexicalScope for ComptimeMainStackFrame<'a> {
