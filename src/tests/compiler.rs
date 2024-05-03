@@ -33,6 +33,11 @@ fn test_variable_assignments_in_blocks() {
     ", Value::I64(42));
 }
 
+#[test]
+fn test_adding_numbers() {
+    expect("41 + 1", Value::I64(42))
+}
+
 fn expect(code: &str, expected: Value) {
     assert_eq!(run(code), expected)
 }

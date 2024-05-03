@@ -11,3 +11,12 @@ pub enum Value {
 
     // Struct()
 }
+
+impl Value {
+    pub fn expect_i64(self) -> i64 {
+        match self {
+            Value::I64(value) => value,
+            _ => todo!("Error handling")
+        }
+    }
+}

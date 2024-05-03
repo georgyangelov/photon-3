@@ -1,8 +1,8 @@
 use crate::compiler::{mir};
-use crate::compiler::lexical_scope::{AccessNameRef, ComptimeMainStackFrame, RootScope, ScopeStack};
-use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue};
+use crate::compiler::lexical_scope::{AccessNameRef, ComptimeMainStackFrame, NameAccessError, RootScope, ScopeStack};
+use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue, Location};
 use std::borrow::Borrow;
-use crate::compiler::mir::FrameLayout;
+use crate::compiler::mir::{FrameLayout, MIR};
 
 #[derive(Debug)]
 pub enum CompileError {}
@@ -170,16 +170,39 @@ impl ModuleCompiler {
             },
 
             ASTValue::NameRef(name) => {
-                match scope.access_local(name.borrow()) {
-                    Err(error) => todo!("Compile error - name not found or something else"),
-                    Ok(AccessNameRef::ComptimeExport(export_ref)) => mir::Node::CompileTimeRef(export_ref),
-                    Ok(AccessNameRef::Global(global_ref)) => mir::Node::GlobalRef(global_ref),
-                    Ok(AccessNameRef::Local(local_ref)) => mir::Node::LocalGet(local_ref),
-                }
+                return Self::access_name_mir(scope, name.borrow(), location)
+                    .map_err(|error| todo!("Compile error - name not found or something else"));
             },
 
             ASTValue::Function(_) => todo!("Support fn definitions"),
-            ASTValue::Call { .. } => todo!("Support method calls"),
+            ASTValue::Call { name, target, args } => {
+                let (target_mir, name) = match target {
+                    None => {
+                        // fn() is either self.fn() or fn.call(), depends on if there is a name `fn`
+                        // in the locals
+                        match Self::access_name_mir(scope, name.borrow(), location.clone()) {
+                            Ok(target) => (target, "call".into()),
+                            Err(NameAccessError::NameNotFound) => {
+                                match Self::access_name_mir(scope, "self", location.clone()) {
+                                    Ok(target_self) => (target_self, name),
+                                    Err(_) => todo!("Compile error - could not find function")
+                                }
+                            },
+                            Err(_) => todo!("Compile error")
+                        }
+                    },
+                    Some(target) => (self.compile_ast(scope, *target)?, name)
+                };
+
+                let mut args_mir = Vec::new();
+                for arg in args {
+                    let mir = self.compile_ast(scope, arg)?;
+
+                    args_mir.push(mir);
+                }
+
+                mir::Node::Call(name, Box::new(target_mir), args_mir)
+            },
 
             ASTValue::FnType { .. } => todo!("Support fn type definitions"),
             ASTValue::TypeAssert { .. } => todo!("Support type asserts"),
@@ -210,5 +233,16 @@ impl ModuleCompiler {
             node,
             location
         })
+    }
+
+    fn access_name_mir(scope: &mut ScopeStack, name: &str, location: Location) -> Result<mir::MIR, NameAccessError> {
+        let node = match scope.access_local(name) {
+            Err(error) => return Err(error),
+            Ok(AccessNameRef::ComptimeExport(export_ref)) => mir::Node::CompileTimeRef(export_ref),
+            Ok(AccessNameRef::Global(global_ref)) => mir::Node::GlobalRef(global_ref),
+            Ok(AccessNameRef::Local(local_ref)) => mir::Node::LocalGet(local_ref),
+        };
+
+        Ok(mir::MIR { node, location })
     }
 }

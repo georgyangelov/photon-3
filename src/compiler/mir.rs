@@ -28,7 +28,7 @@ pub enum Node {
 
     Block(Vec<MIR>),
 
-    Call(FunctionRef, Vec<MIR>)
+    Call(Box<str>, Box<MIR>, Vec<MIR>)
 }
 
 pub struct FunctionTemplate {
