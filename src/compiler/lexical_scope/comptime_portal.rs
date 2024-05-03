@@ -1,5 +1,3 @@
-use crate::compiler::lexical_scope::*;
-
 /// This indicates a switch to compile-time code. It acts as a portal to the ComptimeMainStackFrame
 /// above it. If a new variable is defined by any block inside, it will not affect the current
 /// StackFrame but ComptimeMainStackFrame.
@@ -55,41 +53,10 @@ use crate::compiler::lexical_scope::*;
 ///       }
 ///     }
 ///
-pub struct ComptimePortal<'a> {
-    parent: &'a mut BlockScope<'a>
-}
+pub struct ComptimePortal {}
 
-impl <'a> ComptimePortal<'a> {
-    pub fn new(parent: &'a mut BlockScope<'a>) -> Self {
-        ComptimePortal { parent }
-    }
-
-    pub fn new_child_block(&mut self) -> BlockScope {
-        BlockScope::new(self)
-    }
-}
-
-impl <'a> LexicalScope for ComptimePortal<'a> {
-    fn define_comptime_main_stack_frame_local(&mut self) -> StackFrameLocalRef {
-        self.parent.define_comptime_main_stack_frame_local()
-    }
-
-    fn define_stack_frame_local(&mut self) -> StackFrameLocalRef {
-        self.parent.define_comptime_main_stack_frame_local()
-    }
-
-    fn define_comptime_export(&mut self) -> ComptimeExportRef {
-        self.parent.define_comptime_export()
-    }
-
-    fn access_name(&mut self, name: &str, _export_comptime: bool) -> Result<NameRef, NameAccessError> {
-        let parent_ref = self.parent.access_name(name, false)?;
-
-        match parent_ref {
-            NameRef::Global(global_ref) => Ok(NameRef::Global(global_ref)),
-            NameRef::ComptimeExport(_) => todo!("This shouldn't happen"),
-            NameRef::ComptimeLocal(local_ref) => Ok(NameRef::Local(local_ref)),
-            NameRef::Local(_) => Err(NameAccessError::CannotReferenceRuntimeNameFromComptime)
-        }
+impl ComptimePortal {
+    pub fn new() -> Self {
+        ComptimePortal {}
     }
 }

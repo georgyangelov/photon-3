@@ -8,13 +8,10 @@ fn test_root_level_locals() {
         a // local
      */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    let local_ref = block.define_local(String::from("a"));
-    let result = block.access_local("a");
+    let local_ref = scope.define_local(String::from("a"));
+    let result = scope.access_local("a");
 
     assert_eq!(result, Ok(AccessNameRef::Local(local_ref)))
 }
@@ -25,12 +22,9 @@ fn test_missing_local() {
         a // Error
      */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    let result = block.access_local("a");
+    let result = scope.access_local("a");
 
     assert_eq!(result, Err(NameAccessError::NameNotFound))
 }
@@ -43,14 +37,11 @@ fn test_defining_comptime_vals_at_root() {
         a // comptime export
      */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    block.define_comptime_main_local(String::from("a"));
+    scope.define_comptime_local(String::from("a"));
 
-    let result = block.access_local("a");
+    let result = scope.access_local("a");
 
     assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))))
 }
@@ -65,17 +56,14 @@ fn test_using_comptime_vals_from_comptime_block() {
         )
      */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    let comptime_local_ref = block.define_comptime_main_local(String::from("a"));
+    let comptime_local_ref = scope.define_comptime_local(String::from("a"));
 
-    let mut comptime_portal = block.new_child_comptime_portal();
-    let mut block = comptime_portal.new_child_block();
+    scope.push_comptime_portal();
+    scope.push_block();
 
-    let result = block.access_local("a");
+    let result = scope.access_local("a");
 
     assert_eq!(result, Ok(AccessNameRef::Local(comptime_local_ref)))
 }
@@ -90,16 +78,13 @@ fn test_using_comptime_vals_from_runtime_block() {
         )
      */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    block.define_comptime_main_local(String::from("a"));
+    scope.define_comptime_local(String::from("a"));
 
-    let mut block = block.new_child_block();
+    scope.push_block();
 
-    let result = block.access_local("a");
+    let result = scope.access_local("a");
 
     assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))))
 }
@@ -116,18 +101,15 @@ fn test_reuses_comptime_slots() {
         )
      */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    block.define_comptime_main_local(String::from("a"));
+    scope.define_comptime_local(String::from("a"));
 
-    let result_1 = block.access_local("a");
+    let result_1 = scope.access_local("a");
 
-    let mut block = block.new_child_block();
+    scope.push_block();
 
-    let result_2 = block.access_local("a");
+    let result_2 = scope.access_local("a");
 
     assert_eq!(result_1, result_2)
 }
@@ -140,17 +122,14 @@ fn test_cannot_reference_runtime_vals_from_comptime() {
       @a // Error
     */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    block.define_local(String::from("a"));
+    scope.define_local(String::from("a"));
 
-    let mut comptime_portal = block.new_child_comptime_portal();
-    let mut block = comptime_portal.new_child_block();
+    scope.push_comptime_portal();
+    scope.push_block();
 
-    let result = block.access_local("a");
+    let result = scope.access_local("a");
 
     assert_eq!(result, Err(NameAccessError::CannotReferenceRuntimeNameFromComptime))
 }
@@ -165,22 +144,19 @@ fn test_cannot_reference_runtime_vals_from_comptime_nested() {
         )
     */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
     {
-        let mut comptime_portal = block.new_child_comptime_portal();
-        let mut block = comptime_portal.new_child_block();
+        scope.push_comptime_portal();
+        scope.push_block();
 
-        block.define_local(String::from("a"));
+        scope.define_local(String::from("a"));
 
         {
-            let mut comptime_portal = block.new_child_comptime_portal();
-            let mut block = comptime_portal.new_child_block();
+            scope.push_comptime_portal();
+            scope.push_block();
 
-            let result = block.access_local("a");
+            let result = scope.access_local("a");
 
             assert_eq!(result, Err(NameAccessError::CannotReferenceRuntimeNameFromComptime))
         }
@@ -199,24 +175,25 @@ fn test_captures_comptime_local_in_comptime_fn() {
         )
     */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    let from_ref = block.define_comptime_main_local(String::from("a"));
+    let from_ref = scope.define_comptime_local(String::from("a"));
 
     {
-        let mut comptime_portal = block.new_child_comptime_portal();
-        let mut block = comptime_portal.new_child_block();
+        scope.push_comptime_portal();
+        scope.push_block();
 
         {
-            let mut stack_frame = block.new_child_stack_frame();
-            let mut block = stack_frame.new_child_block();
+            scope.push_stack_frame();
+            scope.push_block();
 
-            let result = block.access_local("a");
+            let result = scope.access_local("a");
 
             assert!(matches!(result, Ok(AccessNameRef::Local(_))));
+
+            scope.pop_block();
+
+            let stack_frame = scope.pop_stack_frame();
 
             match stack_frame.captures.get(0) {
                 None => panic!("Expected to have a capture"),
@@ -238,28 +215,28 @@ fn test_capture_nested_fns_in_comptime() {
         }
     */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
     {
-        let mut comptime_portal = block.new_child_comptime_portal();
-        let mut block = comptime_portal.new_child_block();
+        scope.push_comptime_portal();
+        scope.push_block();
 
         {
-            let mut stack_frame = block.new_child_stack_frame();
-            let mut block = stack_frame.new_child_block();
+            scope.push_stack_frame();
+            scope.push_block();
 
-            let from_ref = block.define_local(String::from("a"));
+            let from_ref = scope.define_local(String::from("a"));
 
             {
-                let mut stack_frame = block.new_child_stack_frame();
-                let mut block = stack_frame.new_child_block();
+                scope.push_stack_frame();
+                scope.push_block();
 
-                let result = block.access_local("a");
+                let result = scope.access_local("a");
 
                 assert!(matches!(result, Ok(AccessNameRef::Local(_))));
+
+                scope.pop_block();
+                let stack_frame = scope.pop_stack_frame();
 
                 match stack_frame.captures.get(0) {
                     None => panic!("Expected to have a capture"),
@@ -289,34 +266,43 @@ fn test_use_comptime_in_another_comptime_fn() {
         }
     */
 
-    let mut root = RootScope::new();
-    let mut comptime_main = root.new_comptime_main_frame();
-    let mut runtime_main = comptime_main.new_runtime_main_frame();
-    let mut block = runtime_main.new_child_block();
+    let mut scope = new_stack();
 
-    block.define_comptime_main_local(String::from("b"));
+    scope.define_comptime_local(String::from("b"));
 
     {
-        let mut comptime_portal = block.new_child_comptime_portal();
-        let mut block = comptime_portal.new_child_block();
+        scope.push_comptime_portal();
+        scope.push_block();
 
         {
-            let mut stack_frame = block.new_child_stack_frame();
-            let mut block = stack_frame.new_child_block();
+            scope.push_stack_frame();
+            scope.push_block();
 
-            block.define_local(String::from("a"));
+            scope.define_local(String::from("a"));
 
             {
-                let mut stack_frame = block.new_child_stack_frame();
-                let mut block = stack_frame.new_child_block();
+                scope.push_stack_frame();
+                scope.push_block();
 
-                block.define_comptime_main_local(String::from("c"));
+                scope.define_comptime_local(String::from("c"));
 
-                let result = block.access_local("c");
+                let result = scope.access_local("c");
 
                 // assert!(matches!(result, Ok(NameRef::Local(_))));
                 assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))));
             }
         }
     }
+}
+
+fn new_stack() -> ScopeStack {
+    let mut stack = ScopeStack::new(
+        RootScope::new(),
+        ComptimeMainStackFrame::new()
+    );
+
+    stack.push_stack_frame();
+    stack.push_block();
+
+    stack
 }

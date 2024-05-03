@@ -7,6 +7,12 @@ pub struct RootScope {
     comptime_exports: Vec<ComptimeExportSlot>,
 }
 
+struct ComptimeExportSlot {}
+
+struct Global {
+    name: String
+}
+
 impl RootScope {
     pub fn new() -> Self {
         Self {
@@ -16,29 +22,11 @@ impl RootScope {
         }
     }
 
-    pub fn new_comptime_main_frame(&mut self) -> ComptimeMainStackFrame {
-        ComptimeMainStackFrame::new(self)
-    }
-}
-
-impl LexicalScope for RootScope {
-    fn define_comptime_main_stack_frame_local(&mut self) -> StackFrameLocalRef {
-        panic!("This should not happen - missing ComptimeMainStackFrame in scope chain")
-    }
-
-    fn define_stack_frame_local(&mut self) -> StackFrameLocalRef {
-        panic!("This should not happen - missing StackFrame in scope chain")
-    }
-
-    fn define_comptime_export(&mut self) -> ComptimeExportRef {
+    pub fn define_comptime_export(&mut self) -> ComptimeExportRef {
         let i = self.comptime_exports.len();
 
         self.comptime_exports.push(ComptimeExportSlot {});
 
         ComptimeExportRef { i }
-    }
-
-    fn access_name(&mut self, _name: &str, _export_comptime: bool) -> Result<NameRef, NameAccessError> {
-        Err(NameAccessError::NameNotFound)
     }
 }

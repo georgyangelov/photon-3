@@ -7,52 +7,27 @@ use crate::compiler::lexical_scope::*;
 /// It does that by allocating "comptime export slots" on the RootScope, then copying locals from
 /// the stack frame into the export slot (usually global memory), which is later included in the
 /// runtime binary as static data and can be referenced from there.
-pub struct ComptimeMainStackFrame<'a> {
-    parent: &'a mut RootScope,
-
+pub struct ComptimeMainStackFrame {
     /// The local stack frame slots - these would only be used during comptime run
-    locals: Vec<StackFrameLocal>,
+    pub locals: Vec<StackFrameLocal>,
 
     /// Tracks local slots which need to be exported
-    exports: Vec<(StackFrameLocalRef, ComptimeExportRef)>
+    pub exports: Vec<(StackFrameLocalRef, ComptimeExportRef)>
 }
 
-impl <'a> ComptimeMainStackFrame<'a> {
-    pub fn new(parent: &'a mut RootScope) -> Self {
+impl ComptimeMainStackFrame {
+    pub fn new() -> Self {
         Self {
-            parent,
             locals: Vec::new(),
             exports: Vec::new()
         }
     }
 
-    pub fn new_block(&mut self) -> BlockScope {
-        BlockScope::new(self)
-    }
-
-    pub fn new_runtime_main_frame(&mut self) -> StackFrame {
-        StackFrame::new(self)
-    }
-}
-
-impl <'a> LexicalScope for ComptimeMainStackFrame<'a> {
-    fn define_comptime_main_stack_frame_local(&mut self) -> StackFrameLocalRef {
-        self.define_stack_frame_local()
-    }
-
-    fn define_stack_frame_local(&mut self) -> StackFrameLocalRef {
+    pub fn define_stack_frame_local(&mut self) -> StackFrameLocalRef {
         let i = self.locals.len();
 
         self.locals.push(StackFrameLocal {});
 
         StackFrameLocalRef { i }
-    }
-
-    fn define_comptime_export(&mut self) -> ComptimeExportRef {
-        self.parent.define_comptime_export()
-    }
-
-    fn access_name(&mut self, name: &str, export_comptime: bool) -> Result<NameRef, NameAccessError> {
-        self.parent.access_name(name, export_comptime)
     }
 }
