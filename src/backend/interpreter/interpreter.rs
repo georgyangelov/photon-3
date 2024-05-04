@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use crate::compiler::mir::{Function, Node};
 use crate::compiler::{mir, Module};
-use crate::interpreter::{Closure, Value};
+use crate::backend::interpreter::{Closure, Value};
 use std::borrow::Borrow;
 
 pub struct Interpreter {
