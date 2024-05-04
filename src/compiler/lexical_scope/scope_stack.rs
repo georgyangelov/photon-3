@@ -157,7 +157,7 @@ impl ScopeStack {
         // However, If we pass through a ComptimePortal, then this will get changed to `false`.
         match self.access_name(name, true) {
             Ok(NameRef::Global(global_ref)) => Ok(AccessNameRef::Global(global_ref)),
-            Ok(NameRef::ComptimeExport(export_ref)) => Ok(AccessNameRef::ComptimeExport(export_ref)),
+            Ok(NameRef::ComptimeExport(export_ref, first_access)) => Ok(AccessNameRef::ComptimeExport(export_ref, first_access)),
             Ok(NameRef::ComptimeLocal(_)) => panic!("Got comptime local from call to access_name with export_comptime = true"),
             Ok(NameRef::Local(local_ref)) => Ok(AccessNameRef::Local(local_ref)),
             Err(error) => Err(error)
@@ -187,7 +187,7 @@ impl ScopeStack {
                         Some(BlockNameRef::Comptime((local_ref, export_ref))) => {
                             if export_comptime {
                                 if let Some(export_ref) = export_ref {
-                                    result = Some(NameRef::ComptimeExport(export_ref));
+                                    result = Some(NameRef::ComptimeExport(export_ref, None));
                                 } else {
                                     result = Some(NameRef::ComptimeLocal(local_ref))
                                 }
@@ -216,7 +216,7 @@ impl ScopeStack {
                     _ => panic!("Logic error. Expected block scope")
                 }
 
-                result = Some(NameRef::ComptimeExport(export_ref));
+                result = Some(NameRef::ComptimeExport(export_ref, Some(local_ref)));
             }
         }
 
@@ -241,7 +241,7 @@ impl ScopeStack {
 
                     Scope::ComptimePortal(_) => {
                         match result {
-                            NameRef::ComptimeExport(_) => panic!("This shouldn't happen"),
+                            NameRef::ComptimeExport(_, _) => panic!("This shouldn't happen"),
                             NameRef::Local(_) => return Err(NameAccessError::CannotReferenceRuntimeNameFromComptime),
                             NameRef::ComptimeLocal(local_ref) => result = NameRef::Local(local_ref),
                             _ => {}
@@ -267,7 +267,7 @@ pub enum AccessNameRef {
     Global(GlobalRef),
 
     /// The name is a compile-time export which can be loaded from the rodata section
-    ComptimeExport(ComptimeExportRef),
+    ComptimeExport(ComptimeExportRef, Option<StackFrameLocalRef>),
 
     /// The name is defined in a parent stack frame
     Local(StackFrameLocalRef)
@@ -279,7 +279,9 @@ enum NameRef {
     Global(GlobalRef),
 
     /// The name is a compile-time export which can be loaded from the rodata section
-    ComptimeExport(ComptimeExportRef),
+    /// The second value is set only the first time - when the "set" instruction for the comptime
+    /// export needs to be generated initially. On latter accesses it will be None
+    ComptimeExport(ComptimeExportRef, Option<StackFrameLocalRef>),
 
     /// The name is defined in a parent stack frame. The stack frame is only present at compile time
     ComptimeLocal(StackFrameLocalRef),

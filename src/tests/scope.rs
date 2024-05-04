@@ -43,7 +43,7 @@ fn test_defining_comptime_vals_at_root() {
 
     let result = scope.access_local("a");
 
-    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))))
+    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))))
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn test_using_comptime_vals_from_runtime_block() {
 
     let result = scope.access_local("a");
 
-    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))))
+    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))))
 }
 
 #[test]
@@ -136,13 +136,25 @@ fn test_reuses_comptime_slots() {
 
     scope.define_comptime_main_local(String::from("a"));
 
-    let result_1 = scope.access_local("a");
+    let result_1 = scope.access_local("a").unwrap();
+    assert!(matches!(result_1, AccessNameRef::ComptimeExport(_, Some(_))));
 
     scope.push_block();
 
-    let result_2 = scope.access_local("a");
+    let result_2 = scope.access_local("a").unwrap();
+    assert!(matches!(result_2, AccessNameRef::ComptimeExport(_, None)));
 
-    assert_eq!(result_1, result_2)
+    let ref_1 = match result_1 {
+        AccessNameRef::ComptimeExport(ref_1, _) => ref_1,
+        _ => panic!("Invalid result type")
+    };
+
+    let ref_2 = match result_2 {
+        AccessNameRef::ComptimeExport(ref_2, _) => ref_2,
+        _ => panic!("Invalid result type")
+    };
+
+    assert_eq!(ref_1, ref_2)
 }
 
 #[test]
@@ -320,7 +332,7 @@ fn test_use_comptime_in_another_comptime_fn() {
                 let result = scope.access_local("c");
 
                 // assert!(matches!(result, Ok(NameRef::Local(_))));
-                assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_))));
+                assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))));
             }
         }
     }

@@ -83,7 +83,7 @@ impl Interpreter {
                         let current_frame_size = self.current_frame_size;
                         let closure: &Closure = closure.borrow();
 
-                        // TODO: Better
+                        // TODO: Make this better
                         arg_values.remove(0);
 
                         self.push_stack_for_call(current_frame_size, func, arg_values, &closure.values);

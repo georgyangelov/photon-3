@@ -170,7 +170,7 @@ impl ModuleCompiler {
             },
 
             ASTValue::NameRef(name) => {
-                return Self::access_name_mir(scope, name.borrow(), location)
+                return self.access_name_mir(scope, name.borrow(), location)
                     .map_err(|error| todo!("Compile error - name not found or something else"));
             },
 
@@ -194,10 +194,10 @@ impl ModuleCompiler {
                     None => {
                         // fn() is either self.fn() or fn.call(), depends on if there is a name `fn`
                         // in the locals
-                        match Self::access_name_mir(scope, name.borrow(), location.clone()) {
+                        match self.access_name_mir(scope, name.borrow(), location.clone()) {
                             Ok(target) => (target, "call".into()),
                             Err(NameAccessError::NameNotFound) => {
-                                match Self::access_name_mir(scope, "self", location.clone()) {
+                                match self.access_name_mir(scope, "self", location.clone()) {
                                     Ok(target_self) => (target_self, name),
                                     Err(_) => {
                                         println!("{:?}", name);
@@ -252,10 +252,25 @@ impl ModuleCompiler {
         })
     }
 
-    fn access_name_mir(scope: &mut ScopeStack, name: &str, location: Location) -> Result<mir::MIR, NameAccessError> {
+    fn access_name_mir(&mut self, scope: &mut ScopeStack, name: &str, location: Location) -> Result<mir::MIR, NameAccessError> {
         let node = match scope.access_local(name) {
             Err(error) => return Err(error),
-            Ok(AccessNameRef::ComptimeExport(export_ref)) => mir::Node::CompileTimeRef(export_ref),
+            Ok(AccessNameRef::ComptimeExport(export_ref, first_access)) => {
+                if let Some(comptime_local_ref) = first_access {
+                    let get_comptime_local = mir::MIR {
+                        node: mir::Node::LocalGet(comptime_local_ref),
+                        location: location.clone()
+                    };
+                    let set_comptime_slot = mir::Node::CompileTimeSet(export_ref, Box::new(get_comptime_local));
+
+                    self.compile_time_main.push(mir::MIR {
+                        node: set_comptime_slot,
+                        location: location.clone()
+                    });
+                }
+
+                mir::Node::CompileTimeRef(export_ref)
+            },
             Ok(AccessNameRef::Global(global_ref)) => mir::Node::GlobalRef(global_ref),
             Ok(AccessNameRef::Local(local_ref)) => mir::Node::LocalGet(local_ref),
         };
