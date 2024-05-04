@@ -172,11 +172,15 @@ impl <I: Iterator<Item = char>> Parser<I> {
                 return self.parse_val(at.location, true, require_call_parens, has_lower_priority_target);
             }
 
-            return self.parse_compile_time_expression(at.location, require_call_parens, has_lower_priority_target)
+            return self.parse_compile_time_expression(at.location, require_call_parens, has_lower_priority_target);
         }
 
         if self.t.value == Minus {
-            return self.parse_unary_operator(require_call_parens, has_lower_priority_target)
+            return self.parse_unary_operator(require_call_parens, has_lower_priority_target);
+        }
+
+        if self.t.value == If {
+            return self.parse_if(require_call_parens, has_lower_priority_target);
         }
 
         let mut target = self.parse_call_target(require_call_parens, has_lower_priority_target)?;
@@ -256,6 +260,58 @@ impl <I: Iterator<Item = char>> Parser<I> {
             },
             location: start_loc.extend(&self.last_location)
         }))
+    }
+
+    fn parse_if(&mut self, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
+        let if_token = self.read()?; // if
+
+        let condition = Self::assert_ast(
+            self.parse_expression(0, true, false)?
+        )?;
+
+        if self.t.value != OpenBrace && self.t.value != Then {
+            return Err(ParseError::UnexpectedToken("Expected '{' or 'then'".into(), self.t.clone()));
+        }
+
+        let on_true = self.parse_if_body_block(require_call_parens, has_lower_priority_target, false)?;
+
+        let on_false = if self.t.value == Else {
+            self.read()?; // else
+
+            Some(self.parse_if_body_block(require_call_parens, has_lower_priority_target, true)?)
+        } else { None };
+
+        Ok(ASTOrPattern::AST(AST {
+            value: ASTValue::If {
+                condition: Box::new(condition),
+                on_true: Box::new(on_true),
+                on_false: on_false.map(|ast| Box::new(ast))
+            },
+            location: if_token.location.extend(&self.last_location)
+        }))
+    }
+
+    fn parse_if_body_block(&mut self, require_call_parens: bool, has_lower_priority_target: bool, for_else: bool) -> Result<AST, ParseError> {
+        let has_braces = self.t.value == OpenBrace;
+        if has_braces || !for_else {
+            self.read()?; // '{' or 'then'
+        }
+
+        let body = Self::assert_ast(self.parse_expression(
+            0,
+            if has_braces { false } else { require_call_parens },
+            if has_braces { false } else { has_lower_priority_target }
+        )?)?;
+
+        if has_braces {
+            if self.t.value != CloseBrace {
+                return Err(ParseError::UnexpectedToken("Expected '}'".into(), self.t.clone()));
+            }
+
+            self.read()?; // }
+        }
+
+        Ok(body)
     }
 
     fn parse_call_target(&mut self, require_call_parens: bool, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
@@ -759,6 +815,9 @@ impl <I: Iterator<Item = char>> Parser<I> {
             // This is because of lambda types
             Equal => true,
 
+            // Ifs
+            If | Then | Else => true,
+
             _ => false
         }
     }
@@ -809,6 +868,9 @@ impl <I: Iterator<Item = char>> Parser<I> {
 
             Val => false,
             Recursive => false,
+            If => true,
+            Else => false,
+            Then => false,
 
             // Binary operators - these suggest that the parens were for an expression, not a lambda
             Plus => false,
@@ -835,7 +897,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             IntLiteral(_) => true,
             DecimalLiteral(_) => true,
             StringLiteral(_) => true,
-            BoolLiteral(_) => true
+            BoolLiteral(_) => true,
         })
     }
 

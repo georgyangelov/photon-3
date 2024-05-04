@@ -14,7 +14,7 @@ pub enum TokenValue {
     EOF, NewLine,
     OpenParen, CloseParen, OpenBrace, CloseBrace, OpenBracket, CloseBracket,
     Comma, Dot, At, Colon,
-    Val, Recursive,
+    Val, Recursive, If, Else, Then,
     Equal, Plus, Minus, Asterisk, Slash, LessThan, GreaterThan,
     EqualEqual, PlusEqual, MinusEqual, AsteriskEqual, SlashEqual, LessThanEqual, GreaterThanEqual, NotEqual,
     Not, And, Or,
@@ -212,6 +212,9 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         let value = match string.as_str() {
             "val" => Val,
             "rec" => Recursive,
+            "if" => If,
+            "else" => Else,
+            "then" => Then,
             "and" => And,
             "or" => Or,
             "true" => BoolLiteral(true),

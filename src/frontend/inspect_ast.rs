@@ -79,6 +79,16 @@ impl Display for ASTValue {
 
             ASTValue::NameRef(name) => write!(f, "{}", name),
 
+            ASTValue::If { condition, on_true, on_false } => {
+                write!(f, "(if {} {}", condition, on_true)?;
+
+                if let Some(on_false) = on_false {
+                    write!(f, " {}", on_false)?;
+                }
+
+                write!(f, ")")
+            },
+
             ASTValue::FnType { params, return_type } => {
                 write!(f, "(fn-type [")?;
 
@@ -95,7 +105,7 @@ impl Display for ASTValue {
 
             ASTValue::TypeAssert { value, typ } => write!(f, "(type-assert {} {})", value, typ),
 
-            ASTValue::CompileTimeExpr(ast) => write!(f, "@{}", ast)
+            ASTValue::CompileTimeExpr(ast) => write!(f, "@{}", ast),
         }
     }
 }

@@ -5,7 +5,7 @@ use crate::compiler::mir::{FunctionRef};
 pub enum Value {
     None,
 
-    I8(i8),
+    Bool(bool),
     // I32(i32),
     I64(i64),
     F64(f64),
@@ -27,6 +27,13 @@ impl Value {
     pub fn expect_i64(self) -> i64 {
         match self {
             Value::I64(value) => value,
+            _ => todo!("Error handling")
+        }
+    }
+
+    pub fn expect_bool(self) -> bool {
+        match self {
+            Value::Bool(value) => value,
             _ => todo!("Error handling")
         }
     }

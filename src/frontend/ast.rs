@@ -27,6 +27,12 @@ pub enum ASTValue {
     },
     NameRef(Box<str>),
 
+    If {
+        condition: Box<AST>,
+        on_true: Box<AST>,
+        on_false: Option<Box<AST>>
+    },
+
     FnType {
         params: Vec<ASTTypeParam>,
         return_type: Box<AST>

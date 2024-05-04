@@ -27,8 +27,8 @@ macro_rules! assert_match {
 fn test_simple_expressions() {
     expect!("42", Value::I64(42));
     expect!("42.3", Value::F64(42.3));
-    expect!("true", Value::I8(1));
-    expect!("false", Value::I8(0));
+    expect!("true", Value::Bool(true));
+    expect!("false", Value::Bool(false));
 }
 
 #[test]
@@ -146,6 +146,12 @@ fn test_comptime_expressions() {
     ", Value::I64(42));
 
     assert_match!(&exports[0], &Value::I64(40));
+}
+
+#[test]
+fn test_ifs() {
+    expect!("if true then 42 else 1", Value::I64(42));
+    expect!("if false then 42 else 1", Value::I64(1));
 }
 
 // fn expect(code: &str, expected: Value) {

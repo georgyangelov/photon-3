@@ -117,7 +117,7 @@ impl ModuleCompiler {
     ) -> Result<mir::MIR, CompileError> {
         let location = ast.location.clone();
         let node = match ast.value {
-            ASTValue::Literal(ASTLiteral::Bool(value)) => mir::Node::LiteralI8(if value { 1 } else { 0 }),
+            ASTValue::Literal(ASTLiteral::Bool(value)) => mir::Node::LiteralBool(value),
             ASTValue::Literal(ASTLiteral::Int(value)) => mir::Node::LiteralI64(value),
             ASTValue::Literal(ASTLiteral::Float(value)) => mir::Node::LiteralF64(value),
 
@@ -246,6 +246,23 @@ impl ModuleCompiler {
                 }
 
                 mir::Node::Call(name, Box::new(target_mir), args_mir)
+            },
+
+            ASTValue::If { condition, on_true, on_false } => {
+                let condition_mir = self.compile_ast(scope, *condition)?;
+
+                scope.push_block();
+                let on_true_mir = self.compile_ast(scope, *on_true)?;
+                scope.pop_block();
+
+                scope.push_block();
+                let on_false_mir = match on_false {
+                    None => None,
+                    Some(on_false) => Some(Box::new(self.compile_ast(scope, *on_false)?))
+                };
+                scope.pop_block();
+
+                mir::Node::If(Box::new(condition_mir), Box::new(on_true_mir), on_false_mir)
             },
 
             ASTValue::FnType { .. } => todo!("Support fn type definitions"),

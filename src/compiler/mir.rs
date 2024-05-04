@@ -19,7 +19,7 @@ pub enum Node {
 
     ConstStringRef(usize),
 
-    LiteralI8(i8),
+    LiteralBool(bool),
     // LiteralI32(i32),
     LiteralI64(i64),
     // LiteralF32(f32),
@@ -31,8 +31,9 @@ pub enum Node {
     Block(Vec<MIR>),
 
     Call(Box<str>, Box<MIR>, Vec<MIR>),
+    CreateClosure(FunctionRef, Vec<StackFrameLocalRef>),
 
-    CreateClosure(FunctionRef, Vec<StackFrameLocalRef>)
+    If(Box<MIR>, Box<MIR>, Option<Box<MIR>>),
 }
 
 pub struct FunctionTemplate {

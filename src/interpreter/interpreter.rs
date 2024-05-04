@@ -71,7 +71,7 @@ impl Interpreter {
             Node::GlobalRef(_) => todo!("Implement GlobalRef eval"),
             Node::ConstStringRef(_) => todo!("Implement ConstStringRef eval"),
 
-            Node::LiteralI8(value) => Value::I8(*value),
+            Node::LiteralBool(value) => Value::Bool(*value),
             Node::LiteralI64(value) => Value::I64(*value),
             Node::LiteralF64(value) => Value::F64(*value),
 
@@ -134,6 +134,22 @@ impl Interpreter {
                     values,
                     function_ref: *fn_ref
                 }))
+            },
+
+            Node::If(condition, on_true, on_false) => {
+                let condition_value = self.eval_mir(module, exports, condition);
+
+                let result = if condition_value.expect_bool() {
+                    self.eval_mir(module, exports, on_true)
+                } else {
+                    if let Some(on_false) = on_false {
+                        self.eval_mir(module, exports, on_false)
+                    } else {
+                        Value::None
+                    }
+                };
+
+                result
             }
         }
     }
@@ -141,7 +157,7 @@ impl Interpreter {
     fn find_func(&self, target: &Value, name: &str) -> Option<FunctionToCall> {
         match target {
             Value::None => None,
-            Value::I8(_) => None,
+            Value::Bool(_) => None,
             Value::I64(_) => {
                 match name {
                     "+" => Some(FunctionToCall::Rust(add_i64)),

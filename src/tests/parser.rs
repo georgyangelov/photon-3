@@ -348,6 +348,17 @@ fn test_nested_fns() {
     assert_parse("(a) (b) a + b", "(fn [(param a)] (fn [(param b)] (+ a b)))")
 }
 
+#[test]
+fn test_ifs() {
+    assert_parse("if a { b }", "(if a b)");
+    assert_parse("if a then b", "(if a b)");
+    assert_parse("if a then b else c", "(if a b c)");
+    assert_parse("if a { b } else { c }", "(if a b c)");
+    assert_parse("if a { b } else if c { d }", "(if a b (if c d))");
+    assert_parse("if a { b } else if c { d } else { e }", "(if a b (if c d e))");
+    assert_parse("if a then b else if c then d else e", "(if a b (if c d e))");
+}
+
 fn assert_parse(code: &str, expected: &str) {
     let result = parse(code).expect(format!("Could not parse code {}", code).as_str());
 
