@@ -1,6 +1,6 @@
 use std::mem::swap;
 use crate::frontend::*;
-use crate::frontend::lookahead_token_iterator::LookaheadTokenIterator;
+use crate::frontend::lookahead_token_iterator::{LookaheadIteratorIterator, LookaheadTokenIterator};
 use crate::frontend::ParseError::UnexpectedPattern;
 use crate::frontend::TokenValue::*;
 
@@ -387,8 +387,11 @@ impl <I: Iterator<Item = char>> Parser<I> {
     }
 
     fn parse_expression_starting_with_open_paren(&mut self, has_lower_priority_target: bool) -> Result<ASTOrPattern, ParseError> {
-        if self.check_if_open_paren_for_lambda()? {
-            return self.parse_lambda_or_lambda_type(has_lower_priority_target);
+        {
+            let mut lookahead = self.lexer.look_ahead();
+            if Self::check_if_open_paren_for_lambda(&mut lookahead)? {
+                return self.parse_lambda_or_lambda_type(has_lower_priority_target);
+            }
         }
 
         let start_token = self.read()?; // (
@@ -760,9 +763,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         }
     }
 
-    fn check_if_open_paren_for_lambda(&mut self) -> Result<bool, ParseError> {
-        let mut reader = self.lexer.look_ahead();
-
+    fn check_if_open_paren_for_lambda(reader: &mut LookaheadIteratorIterator<I>) -> Result<bool, ParseError> {
         let mut nested_paren_level = 1;
         let mut token = reader.next().map_err(ParseError::LexerError)?; // (
 
@@ -784,11 +785,12 @@ impl <I: Iterator<Item = char>> Parser<I> {
             EOF => false,
             NewLine => false,
 
-            // This is intentionally false, because it is ambiguous:
-            // (thisIsAFunction)(42)
-            // (function.call + something)(42)
-            // (argument) (42 + argument)
-            OpenParen => false,
+            // This is usually ambiguous, that's why we need to recursively check:
+            // (thisIsAFunction)(42) -> expr
+            // (function.call + something)(42) -> expr
+            // (fnVar) (42 + argument) -> expr
+            // (a) (b) a + b -> lambda
+            OpenParen => Self::check_if_open_paren_for_lambda(reader)?,
 
             CloseParen => false,
             OpenBrace => true,

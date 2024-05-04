@@ -345,7 +345,7 @@ fn test_compile_time_vals() {
 
 #[test]
 fn test_nested_fns() {
-    assert_parse("(a) (b) a + b", "(fn [a] (fn [b] (+ a b)))")
+    assert_parse("(a) (b) a + b", "(fn [(param a)] (fn [(param b)] (+ a b)))")
 }
 
 fn assert_parse(code: &str, expected: &str) {
