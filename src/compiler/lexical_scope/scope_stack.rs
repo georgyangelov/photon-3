@@ -22,6 +22,13 @@ impl ScopeStack {
         }
     }
 
+    pub fn consume_root(mut self) -> (RootScope, ComptimeMainStackFrame) {
+        let comptime_main = self.pop_comptime_main_stack_frame();
+        let root = self.pop_root();
+
+        (root, comptime_main)
+    }
+
     pub fn push(&mut self, scope: Scope) {
         self.stack.push(scope)
     }

@@ -4,10 +4,10 @@ pub struct RootScope {
     // runtime_globals: Vec<Global>,
     // comptime_globals: Vec<Global>,
 
-    comptime_exports: Vec<ComptimeExportSlot>,
+    pub comptime_exports: Vec<ComptimeExportSlot>,
 }
 
-struct ComptimeExportSlot {}
+pub struct ComptimeExportSlot {}
 
 struct Global {
     name: String

@@ -82,6 +82,15 @@ fn test_closures_2() {
     ", Value::I64(42))
 }
 
+#[test]
+fn test_comptime_vars() {
+    expect!("
+        @val a = 42
+
+        a
+    ", Value::I64(42))
+}
+
 // fn expect(code: &str, expected: Value) {
 //     expect!(run(code), expected)
 // }
@@ -92,7 +101,9 @@ fn run(code: &str) -> Value {
 
     let mut interpreter = Interpreter::new();
 
-    interpreter.eval_module(&module)
+    let comptime_result = interpreter.eval_module_comptime(&module);
+
+    interpreter.eval_module_runtime(&module, comptime_result.comptime_exports)
 }
 
 fn parse(code: &str) -> Result<AST, ParseError> {

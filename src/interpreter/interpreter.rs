@@ -10,6 +10,12 @@ pub struct Interpreter {
     current_frame_size: usize
 }
 
+#[derive(Debug)]
+pub struct ModuleEvalResult {
+    pub comptime_exports: Vec<Value>,
+    pub result: Value
+}
+
 impl Interpreter {
     pub fn new() -> Self {
         let mut stack = Vec::new();
@@ -22,23 +28,46 @@ impl Interpreter {
         }
     }
 
-    pub fn eval_module(&mut self, module: &Module) -> Value {
+    pub fn eval_module_comptime(&mut self, module: &Module) -> ModuleEvalResult {
+        let mut comptime_exports = Vec::new();
+        comptime_exports.resize(module.comptime_export_count, Value::None);
+
+        let main = &module.comptime_main;
+
+        let current_frame_size = self.current_frame_size;
+        self.push_stack_for_call(current_frame_size, main, vec![], &[]);
+        let result = self.eval_mir(module, &mut comptime_exports, &main.body);
+        self.pop_stack_after_call(current_frame_size);
+
+        ModuleEvalResult {
+            comptime_exports,
+            result
+        }
+    }
+
+    pub fn eval_module_runtime(&mut self, module: &Module, mut comptime_exports: Vec<Value>) -> Value {
         let main = &module.runtime_main;
 
         let current_frame_size = self.current_frame_size;
         self.push_stack_for_call(current_frame_size, main, vec![], &[]);
-        let result = self.eval_mir(module, &main.body);
+        let result = self.eval_mir(module, &mut comptime_exports, &main.body);
         self.pop_stack_after_call(current_frame_size);
 
         result
     }
 
-    fn eval_mir(&mut self, module: &Module, mir: &mir::MIR) -> Value {
+    fn eval_mir(&mut self, module: &Module, exports: &mut Vec<Value>, mir: &mir::MIR) -> Value {
         match &mir.node {
             Node::Nop => Value::None,
 
-            Node::CompileTimeRef(_) => todo!("Implement CompileTimeRef eval"),
-            Node::CompileTimeSet(_, _) => todo!("Implement CompileTimeSet eval"),
+            Node::CompileTimeRef(export_ref) => exports[export_ref.i].clone(),
+            Node::CompileTimeSet(export_ref, mir) => {
+                let value = self.eval_mir(module, exports, mir);
+
+                exports[export_ref.i] = value;
+
+                Value::None
+            },
             Node::GlobalRef(_) => todo!("Implement GlobalRef eval"),
             Node::ConstStringRef(_) => todo!("Implement ConstStringRef eval"),
 
@@ -47,7 +76,7 @@ impl Interpreter {
             Node::LiteralF64(value) => Value::F64(*value),
 
             Node::LocalSet(local_ref, mir) => {
-                self.stack[self.stack_offset + local_ref.i] = self.eval_mir(module, mir);
+                self.stack[self.stack_offset + local_ref.i] = self.eval_mir(module, exports, mir);
 
                 Value::None
             },
@@ -57,21 +86,21 @@ impl Interpreter {
                 let mut result = Value::None;
 
                 for mir in mirs {
-                    result = self.eval_mir(module, mir);
+                    result = self.eval_mir(module, exports, mir);
                 }
 
                 result
             },
 
             Node::Call(name, target, args) => {
-                let target = self.eval_mir(module, target);
+                let target = self.eval_mir(module, exports, target);
                 let func = self.find_func(&target, name);
 
                 let mut arg_values = Vec::with_capacity(args.len() + 1);
                 arg_values.push(target);
 
                 for arg in args {
-                    let value = self.eval_mir(module, arg);
+                    let value = self.eval_mir(module, exports, arg);
                     arg_values.push(value);
                 }
 
@@ -79,7 +108,7 @@ impl Interpreter {
                     None => todo!("Error handling - could not find function"),
                     Some(FunctionToCall::Rust(rust_fn)) => rust_fn(arg_values),
                     Some(FunctionToCall::Closure(closure)) => {
-                        let func = &module.runtime_functions[closure.function_ref.i];
+                        let func = &module.functions[closure.function_ref.i];
                         let current_frame_size = self.current_frame_size;
                         let closure: &Closure = closure.borrow();
 
@@ -87,7 +116,7 @@ impl Interpreter {
                         arg_values.remove(0);
 
                         self.push_stack_for_call(current_frame_size, func, arg_values, &closure.values);
-                        let result = self.eval_mir(module, &func.body);
+                        let result = self.eval_mir(module, exports, &func.body);
                         self.pop_stack_after_call(current_frame_size);
 
                         result

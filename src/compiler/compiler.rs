@@ -19,20 +19,23 @@ pub struct ModuleCompiler {
     // pub compile_time_scope: BlockScope<'a>,
     pub compile_time_main: Vec<MIR>,
 
-    pub runtime_functions: Vec<mir::Function>
+    pub functions: Vec<mir::Function>
 }
 
 pub struct Module {
-    // pub compile_time_functions: Vec<lir::Function>,
+    // TODO: Optimize away functions that are used only from comptime
+    pub functions: Vec<mir::Function>,
 
-    // pub compile_time_main: lir::Function,
+    pub comptime_export_count: usize,
+    pub comptime_main: mir::Function,
 
-    pub runtime_functions: Vec<mir::Function>,
     pub runtime_main: mir::Function
 }
 
 impl ModuleCompiler {
     pub fn compile_module(ast: AST) -> Result<Module, CompileError> {
+        let module_location = ast.location.clone();
+
         // The module is an implicit function, it's executed like one
         let module_fn = ASTFunction {
             params: Vec::new(),
@@ -51,16 +54,33 @@ impl ModuleCompiler {
         let mut builder = ModuleCompiler {
             const_strings: Vec::new(),
             compile_time_main: Vec::new(),
-            runtime_functions: Vec::new()
+            functions: Vec::new()
         };
 
-        let compiled = builder.compile_function(&mut scope, module_fn)?;
+        let runtime_main = builder.compile_function(&mut scope, module_fn)?;
+
+        let (root_scope, comptime_main_frame) = scope.consume_root();
+
+        let comptime_main = mir::Function {
+            body: mir::MIR {
+                node: mir::Node::Block(builder.compile_time_main),
+                location: module_location
+            },
+            frame_layout: mir::FrameLayout {
+                size: comptime_main_frame.locals.len()
+            },
+            captures: vec![]
+        };
 
         Ok(Module {
             // compile_time_functions: builder.compile_time_functions,
             // run_time_functions: builder.run_time_functions
-            runtime_functions: builder.runtime_functions,
-            runtime_main: compiled
+            functions: builder.functions,
+
+            comptime_export_count: root_scope.comptime_exports.len(),
+            comptime_main,
+
+            runtime_main
         })
     }
 
@@ -153,7 +173,14 @@ impl ModuleCompiler {
 
                     let comptime_local_ref = scope.define_comptime_main_local(String::from(name));
 
-                    mir::Node::LocalSet(comptime_local_ref, Box::new(mir))
+                    let set_local_mir = mir::MIR {
+                        node: mir::Node::LocalSet(comptime_local_ref, Box::new(mir)),
+                        location: location.clone()
+                    };
+
+                    self.compile_time_main.push(set_local_mir);
+
+                    mir::Node::Nop
                 } else {
                     // val <name> = <value>
 
@@ -176,10 +203,10 @@ impl ModuleCompiler {
 
             ASTValue::Function(func) => {
                 let func_mir = self.compile_function(scope, func)?;
-                let func_ref = FunctionRef { i: self.runtime_functions.len() };
+                let func_ref = FunctionRef { i: self.functions.len() };
                 let captures = func_mir.captures.clone();
 
-                self.runtime_functions.push(func_mir);
+                self.functions.push(func_mir);
 
                 let mut locals_to_capture = Vec::with_capacity(captures.len());
                 for capture in captures {

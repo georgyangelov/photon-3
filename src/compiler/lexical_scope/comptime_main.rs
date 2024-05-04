@@ -9,17 +9,13 @@ use crate::compiler::lexical_scope::*;
 /// runtime binary as static data and can be referenced from there.
 pub struct ComptimeMainStackFrame {
     /// The local stack frame slots - these would only be used during comptime run
-    pub locals: Vec<StackFrameLocal>,
-
-    /// Tracks local slots which need to be exported
-    pub exports: Vec<(StackFrameLocalRef, ComptimeExportRef)>
+    pub locals: Vec<StackFrameLocal>
 }
 
 impl ComptimeMainStackFrame {
     pub fn new() -> Self {
         Self {
-            locals: Vec::new(),
-            exports: Vec::new()
+            locals: Vec::new()
         }
     }
 

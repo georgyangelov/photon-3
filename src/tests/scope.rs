@@ -114,10 +114,13 @@ fn test_using_comptime_vals_from_runtime_block() {
     scope.define_comptime_main_local(String::from("a"));
 
     scope.push_block();
-
     let result = scope.access_local("a");
+    scope.pop_block();
 
-    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))))
+    let (root, _) = consume_stack(scope);
+
+    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))));
+    assert_eq!(root.comptime_exports.len(), 1);
 }
 
 #[test]
@@ -348,4 +351,11 @@ fn new_stack() -> ScopeStack {
     stack.push_block();
 
     stack
+}
+
+fn consume_stack(mut stack: ScopeStack) -> (RootScope, ComptimeMainStackFrame) {
+    stack.pop_block();
+    stack.pop_stack_frame();
+
+    stack.consume_root()
 }
