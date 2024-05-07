@@ -550,6 +550,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 
 [[package]]
+name = "lib"
+version = "0.1.0"
+
+[[package]]
 name = "libc"
 version = "0.2.153"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -645,7 +649,7 @@ name = "photon-3"
 version = "0.1.0"
 dependencies = [
  "binaryen-sys",
- "runtime",
+ "lib",
  "wasmtime",
 ]
 

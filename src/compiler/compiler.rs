@@ -69,6 +69,8 @@ impl ModuleCompiler {
             frame_layout: mir::FrameLayout {
                 size: comptime_main_frame.locals.len()
             },
+            param_count: 0,
+            local_count: comptime_main_frame.locals.len(),
             captures: vec![]
         };
 
@@ -92,6 +94,8 @@ impl ModuleCompiler {
         scope.push_stack_frame();
         scope.push_block();
 
+        let param_count = ast.params.len();
+
         for param in ast.params {
             scope.define_local(String::from(param.name));
         }
@@ -105,6 +109,8 @@ impl ModuleCompiler {
             frame_layout: FrameLayout {
                 size: stack_frame.locals.len()
             },
+            param_count,
+            local_count: stack_frame.locals.len() - param_count,
             captures: stack_frame.captures,
             body
         })

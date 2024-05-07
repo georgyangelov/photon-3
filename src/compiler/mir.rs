@@ -44,6 +44,8 @@ pub struct FunctionTemplate {
 pub struct Function {
     // pub param_types: Vec<ComptimeExportRef>,
     pub frame_layout: FrameLayout,
+    pub param_count: usize,
+    pub local_count: usize,
     pub captures: Vec<Capture>,
     pub body: MIR,
     // pub return_type: ComptimeExportRef

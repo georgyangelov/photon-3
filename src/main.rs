@@ -5,7 +5,7 @@ use std::ptr;
 use std::ptr::slice_from_raw_parts_mut;
 use binaryen_sys::*;
 use wasmtime::{Engine, Instance, Linker, Memory, Module, Store};
-use runtime::Position;
+// use runtime::Position;
 
 mod frontend;
 mod tests;
@@ -118,6 +118,8 @@ fn build_wasm_module() -> Vec<u8> {
     unsafe {
         let module = BinaryenModuleCreate();
 
+        BinaryenModuleSetFeatures(module, BinaryenFeatureMultivalue());
+
         let add_internal_name = CString::new("add_imported").unwrap();
 
         // Import add function from the runtime module
@@ -142,24 +144,49 @@ fn build_wasm_module() -> Vec<u8> {
         let func_name = CString::new("adder").unwrap();
 
         // Define local adder function
+        // {
+        //     let mut params = [BinaryenTypeInt64(), BinaryenTypeInt64()];
+        //     let params = BinaryenTypeCreate(params.as_mut_ptr(), params.len() as u32);
+        //     let results = BinaryenTypeInt64();
+        //
+        //     let x = BinaryenLocalGet(module, 0, BinaryenTypeInt64());
+        //     let y = BinaryenLocalGet(module, 1, BinaryenTypeInt64());
+        //
+        //     // let add = BinaryenBinary(module, BinaryenAddInt64(), x, y);
+        //
+        //     let mut add_call_operands = [x, y];
+        //     let call = BinaryenCall(
+        //         module,
+        //         add_internal_name.as_ptr(),
+        //         add_call_operands.as_mut_ptr(),
+        //         add_call_operands.len() as u32,
+        //         results
+        //     );
+        //
+        //     let _ = BinaryenAddFunction(
+        //         module,
+        //         func_name.as_ptr(),
+        //         params,
+        //         results,
+        //         ptr::null_mut(),
+        //         0,
+        //         call
+        //     );
+        // }
+
+        // Define local nop function to test multivalue
         {
             let mut params = [BinaryenTypeInt64(), BinaryenTypeInt64()];
             let params = BinaryenTypeCreate(params.as_mut_ptr(), params.len() as u32);
-            let results = BinaryenTypeInt64();
+
+            let mut result_types = [BinaryenTypeInt64(), BinaryenTypeInt64()];
+            let results = BinaryenTypeCreate(result_types.as_mut_ptr(), result_types.len() as u32);
 
             let x = BinaryenLocalGet(module, 0, BinaryenTypeInt64());
             let y = BinaryenLocalGet(module, 1, BinaryenTypeInt64());
 
-            // let add = BinaryenBinary(module, BinaryenAddInt64(), x, y);
-
-            let mut add_call_operands = [x, y];
-            let call = BinaryenCall(
-                module,
-                add_internal_name.as_ptr(),
-                add_call_operands.as_mut_ptr(),
-                add_call_operands.len() as u32,
-                results
-            );
+            let mut tuple_args = [x, y];
+            let body = BinaryenTupleMake(module, tuple_args.as_mut_ptr(), tuple_args.len() as u32);
 
             let _ = BinaryenAddFunction(
                 module,
@@ -168,7 +195,7 @@ fn build_wasm_module() -> Vec<u8> {
                 results,
                 ptr::null_mut(),
                 0,
-                call
+                body
             );
         }
 
@@ -177,6 +204,8 @@ fn build_wasm_module() -> Vec<u8> {
         let is_valid = BinaryenModuleValidate(module);
         println!("Module valid: {}", is_valid);
 
+        BinaryenModulePrint(module);
+        BinaryenModuleOptimize(module);
         BinaryenModulePrint(module);
 
         let size = BinaryenModuleWrite(module, output.as_mut_ptr() as *mut c_char, output.capacity());

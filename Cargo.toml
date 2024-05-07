@@ -1,5 +1,5 @@
 [workspace]
-members = ["runtime"]
+members = ["lib", "runtime"]
 
 [package]
 name = "photon-3"
@@ -9,7 +9,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-runtime = { path = "./runtime" }
+lib = { path = "./lib" }
 wasmtime = "19.0.2"
 binaryen-sys = "0.13.0"
 #binaryen_capi-sys = "0.117.0"
