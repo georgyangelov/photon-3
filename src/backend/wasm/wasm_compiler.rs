@@ -2,6 +2,7 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use binaryen_sys::*;
 use lib::{ValueT};
+use crate::backend::wasm::wasm_compiler::CompileMirResult::{NoResult, Separate, Tuple};
 use crate::compiler;
 use crate::compiler::mir;
 use crate::compiler::mir::Node;
@@ -93,7 +94,11 @@ impl <'a> WasmCompiler<'a> {
         let mut tuple_args = [BinaryenTypeInt32(), BinaryenTypeInt64()];
         let return_type = BinaryenTypeCreate(tuple_args.as_mut_ptr(), tuple_args.len() as u32);
 
-        let body = self.compile_mir(&function.body);
+        let body = match self.compile_mir(&function.body) {
+            Separate((t, v)) => self.make_tuple([t, v]),
+            Tuple(tuple) => tuple,
+            NoResult(_) => todo!()
+        };
 
         BinaryenAddFunction(
             self.module,
@@ -106,9 +111,9 @@ impl <'a> WasmCompiler<'a> {
         )
     }
 
-    unsafe fn compile_mir(&mut self, mir: &mir::MIR) -> BinaryenExpressionRef {
+    unsafe fn compile_mir(&mut self, mir: &mir::MIR) -> CompileMirResult {
         match &mir.node {
-            Node::Nop => BinaryenNop(self.module),
+            Node::Nop => Separate(self.make_none_const()),
 
             Node::CompileTimeRef(_) => todo!("Support CompileTimeRef"),
             Node::CompileTimeSet(_, _) => todo!("Support CompileTimeSet"),
@@ -118,48 +123,54 @@ impl <'a> WasmCompiler<'a> {
 
             Node::LiteralBool(value) => {
                 let (t, v) = ValueT::bool(*value);
+                let t = BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal()));
+                let v = BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()));
 
-                self.make_tuple([
-                    BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal())),
-                    BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()))
-                ])
+                Separate((t, v))
             }
 
             Node::LiteralI64(value) => {
                 let (t, v) = ValueT::i64(*value);
+                let t = BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal()));
+                let v = BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()));
 
-                self.make_tuple([
-                    BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal())),
-                    BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()))
-                ])
+                Separate((t, v))
             },
             Node::LiteralF64(value) => {
                 let (t, v) = ValueT::f64(*value);
+                let t = BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal()));
+                let v = BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()));
 
-                self.make_tuple([
-                    BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal())),
-                    BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()))
-                ])
+                Separate((t, v))
             },
 
             // TODO: Optimize this -> currently creates consts twice (?)
             Node::LocalSet(local_ref, mir) => {
-                let expr = self.compile_mir(mir);
+                NoResult(match self.compile_mir(mir) {
+                    Separate((t, v)) => self.make_block(&mut [
+                        BinaryenLocalSet(self.module, (local_ref.i * 2) as u32, t),
+                        BinaryenLocalSet(self.module, (local_ref.i * 2 + 1) as u32, v)
+                    ], false),
+                    Tuple(_) => todo!("Use scratch locals for this"),
+                    NoResult(_) => panic!("Should not happen - cannot assign NoResult to variable")
+                })
 
-                self.make_block(&mut [
-                    BinaryenLocalSet(self.module, (local_ref.i * 2) as u32, BinaryenTupleExtract(self.module, expr, 0)),
-                    BinaryenLocalSet(self.module, (local_ref.i * 2 + 1) as u32, BinaryenTupleExtract(self.module, expr, 1)),
-
-                    // TODO: Can we optimize this?
-                    self.make_none_const()
-                ], true)
+                // let (t, v) = self.compile_mir(mir);
+                //
+                // self.make_block(&mut [
+                //     BinaryenLocalSet(self.module, (local_ref.i * 2) as u32, t),
+                //     BinaryenLocalSet(self.module, (local_ref.i * 2 + 1) as u32, v),
+                //
+                //     // TODO: Can we optimize this?
+                //     self.make_tuple()
+                // ], true)
             },
 
             Node::LocalGet(local_ref) => {
-                self.make_tuple([
+                Separate((
                     BinaryenLocalGet(self.module, (local_ref.i * 2) as u32, BinaryenTypeInt32()),
                     BinaryenLocalGet(self.module, (local_ref.i * 2 + 1) as u32, BinaryenTypeInt64())
-                ])
+                ))
             },
 
             Node::Block(mirs) => {
@@ -168,16 +179,26 @@ impl <'a> WasmCompiler<'a> {
                 let mut exprs = Vec::with_capacity(mirs.len());
                 for (i, mir) in mirs.iter().enumerate() {
                     let expr = self.compile_mir(mir);
-                    let expr = if i == mirs.len() - 1 {
-                        expr
-                    } else {
-                        BinaryenDrop(self.module, expr)
-                    };
 
-                    exprs.push(expr);
+                    if i == mirs.len() - 1 {
+                        match expr {
+                            Separate((a, b)) => exprs.push(self.make_tuple([a, b])),
+                            Tuple(a) => exprs.push(a),
+                            NoResult(expr) => todo!()
+                        }
+                    } else {
+                        match expr {
+                            Separate((a, b)) => {
+                                exprs.push(BinaryenDrop(self.module, a));
+                                exprs.push(BinaryenDrop(self.module, b));
+                            }
+                            Tuple(a) => {exprs.push(BinaryenDrop(self.module, a));}
+                            NoResult(expr) => { exprs.push(expr); }
+                        }
+                    }
                 }
 
-                self.make_block(exprs.as_mut_slice(), true)
+                Tuple(self.make_block(exprs.as_mut_slice(), true))
             },
 
             Node::Call(_, _, _) => todo!("Support Call"),
@@ -202,12 +223,17 @@ impl <'a> WasmCompiler<'a> {
         )
     }
 
-    unsafe fn make_none_const(&self) -> BinaryenExpressionRef {
+    unsafe fn make_none_const(&self) -> (BinaryenExpressionRef, BinaryenExpressionRef) {
         let (t, v) = ValueT::none();
+        let t = BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal()));
+        let v = BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()));
 
-        self.make_tuple([
-            BinaryenConst(self.module, BinaryenLiteralInt32(t.to_literal())),
-            BinaryenConst(self.module, BinaryenLiteralInt64(v.to_literal()))
-        ])
+        (t, v)
     }
+}
+
+enum CompileMirResult {
+    Separate((BinaryenExpressionRef, BinaryenExpressionRef)),
+    Tuple(BinaryenExpressionRef),
+    NoResult(BinaryenExpressionRef)
 }

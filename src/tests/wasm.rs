@@ -13,6 +13,7 @@ fn test_literals() {
 fn test_locals() {
     assert_eq!(run("
         val a = 42
+        val b = 11
 
         a
     "), ValueT::i64(42))
