@@ -5,14 +5,20 @@ use std::ptr;
 use std::ptr::slice_from_raw_parts_mut;
 use binaryen_sys::*;
 use wasmtime::{Engine, Instance, Linker, Memory, Module, Store};
+use crate::llvm_test::llvm_test;
 // use runtime::Position;
 
 mod frontend;
 mod tests;
 mod compiler;
 mod backend;
+mod llvm_test;
 
 fn main() {
+    unsafe { llvm_test() }
+}
+
+fn binaryen_test() {
     let engine = Engine::default();
 
     let runtime_module = Module::from_file(&engine, "target/wasm32-unknown-unknown/release/runtime.wasm")
