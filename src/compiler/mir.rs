@@ -1,4 +1,4 @@
-use crate::compiler::lexical_scope::{Capture, ComptimeExportRef, GlobalRef, StackFrameLocalRef};
+use crate::compiler::lexical_scope::{ParamRef, Capture, CaptureRef, ComptimeExportRef, GlobalRef, StackFrameLocalRef, CaptureFrom};
 use crate::frontend::Location;
 
 #[derive(Debug)]
@@ -25,13 +25,16 @@ pub enum Node {
     // LiteralF32(f32),
     LiteralF64(f64),
 
+    ParamRef(ParamRef),
+    CaptureRef(CaptureRef),
+
     LocalSet(StackFrameLocalRef, Box<MIR>),
     LocalGet(StackFrameLocalRef),
 
     Block(Vec<MIR>),
 
     Call(Box<str>, Box<MIR>, Vec<MIR>),
-    CreateClosure(FunctionRef, Vec<StackFrameLocalRef>),
+    CreateClosure(FunctionRef, Vec<CaptureFrom>),
 
     If(Box<MIR>, Box<MIR>, Option<Box<MIR>>),
 }

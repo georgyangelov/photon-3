@@ -39,8 +39,8 @@ impl ScopeStack {
         self.stack.push(Scope::BlockScope(scope))
     }
 
-    pub fn push_stack_frame(&mut self) {
-        let scope = StackFrame::new();
+    pub fn push_stack_frame(&mut self, params: Vec<String>) {
+        let scope = StackFrame::new(params);
 
         self.stack.push(Scope::StackFrame(scope))
     }
@@ -166,8 +166,10 @@ impl ScopeStack {
             Ok(NameRef::Global(global_ref)) => Ok(AccessNameRef::Global(global_ref)),
             Ok(NameRef::ComptimeExport(export_ref, first_access)) => Ok(AccessNameRef::ComptimeExport(export_ref, first_access)),
             Ok(NameRef::ComptimeLocal(_)) => panic!("Got comptime local from call to access_name with export_comptime = true"),
+            Ok(NameRef::Capture(capture_ref)) => Ok(AccessNameRef::Capture(capture_ref)),
+            Ok(NameRef::Param(param_ref)) => Ok(AccessNameRef::Param(param_ref)),
             Ok(NameRef::Local(local_ref)) => Ok(AccessNameRef::Local(local_ref)),
-            Err(error) => Err(error)
+            Err(error) => Err(error),
         }
     }
 
@@ -181,7 +183,19 @@ impl ScopeStack {
             match &mut self.stack[i] {
                 Scope::RootScope(_) => {}
                 Scope::ComptimeMainFrame(_) => {}
-                Scope::StackFrame(_) => {}
+                Scope::StackFrame(scope) => {
+                    match scope.find_param_or_capture(name) {
+                        None => {}
+                        Some(ParamOrCapture::Param(param_ref)) => {
+                            result = Some(NameRef::Param(param_ref));
+                            break
+                        }
+                        Some(ParamOrCapture::Capture(capture_ref)) => {
+                            result = Some(NameRef::Capture(capture_ref));
+                            break
+                        }
+                    }
+                },
 
                 Scope::BlockScope(scope) => {
                     match scope.find_name(name) {
@@ -238,18 +252,28 @@ impl ScopeStack {
                     Scope::BlockScope(_) => {}
 
                     Scope::StackFrame(frame) => {
-                        match result {
-                            NameRef::Local(parent_ref) => {
-                                result = NameRef::Local(frame.define_capture(parent_ref))
+                        let capture_from = match result {
+                            NameRef::Capture(capture_ref) => Some(CaptureFrom::Capture(capture_ref)),
+                            NameRef::Param(param_ref) => Some(CaptureFrom::Param(param_ref)),
+                            NameRef::Local(local_ref) => Some(CaptureFrom::Local(local_ref)),
+                            _ => None
+                        };
+
+                        match capture_from {
+                            None => {}
+                            Some(capture_from) => {
+                                let capture_ref = frame.define_capture(capture_from, String::from(name));
+
+                                result = NameRef::Capture(capture_ref);
                             }
-                            _ => {}
                         }
                     },
 
                     Scope::ComptimePortal(_) => {
                         match result {
                             NameRef::ComptimeExport(_, _) => panic!("This shouldn't happen"),
-                            NameRef::Local(_) => return Err(NameAccessError::CannotReferenceRuntimeNameFromComptime),
+                            NameRef::Capture(_) | NameRef::Param(_) | NameRef::Local(_) =>
+                                return Err(NameAccessError::CannotReferenceRuntimeNameFromComptime),
                             NameRef::ComptimeLocal(local_ref) => result = NameRef::Local(local_ref),
                             _ => {}
                         }
@@ -276,6 +300,12 @@ pub enum AccessNameRef {
     /// The name is a compile-time export which can be loaded from the rodata section
     ComptimeExport(ComptimeExportRef, Option<StackFrameLocalRef>),
 
+    /// The name is accessed from a parent scope in a closure
+    Capture(CaptureRef),
+
+    /// The name is a function parameter of the currently-executing function
+    Param(ParamRef),
+
     /// The name is defined in a parent stack frame
     Local(StackFrameLocalRef)
 }
@@ -292,6 +322,14 @@ enum NameRef {
 
     /// The name is defined in a parent stack frame. The stack frame is only present at compile time
     ComptimeLocal(StackFrameLocalRef),
+
+    /// The name is accessed from a parent scope in a closure
+    Capture(CaptureRef),
+
+    /// The name is a function parameter of the currently-executing function
+    /// If we're in a closure, and we're referencing a parent function's arguments, then that would
+    /// be a [NameRef::Capture], not [NameRef::Param].
+    Param(ParamRef),
 
     /// The name is defined in a parent stack frame
     Local(StackFrameLocalRef)

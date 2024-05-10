@@ -24,3 +24,9 @@ pub struct ComptimeExportRef { pub i: usize }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct StackFrameLocalRef { pub i: usize }
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct ParamRef { pub i: usize }
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct CaptureRef { pub i: usize }

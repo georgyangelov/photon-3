@@ -91,14 +91,14 @@ impl ModuleCompiler {
         scope: &mut ScopeStack,
         ast: ASTFunction
     ) -> Result<mir::Function, CompileError> {
-        scope.push_stack_frame();
+        scope.push_stack_frame(ast.params.iter().map(|param| String::from(param.name.clone())).collect());
         scope.push_block();
 
         let param_count = ast.params.len();
 
-        for param in ast.params {
-            scope.define_local(String::from(param.name));
-        }
+        // for param in ast.params {
+        //     scope.define_local(String::from(param.name));
+        // }
 
         let body = self.compile_ast(scope, *ast.body)?;
 
@@ -110,7 +110,7 @@ impl ModuleCompiler {
                 size: stack_frame.locals.len()
             },
             param_count,
-            local_count: stack_frame.locals.len() - param_count,
+            local_count: stack_frame.locals.len(),
             captures: stack_frame.captures,
             body
         })
@@ -214,12 +214,12 @@ impl ModuleCompiler {
 
                 self.functions.push(func_mir);
 
-                let mut locals_to_capture = Vec::with_capacity(captures.len());
+                let mut to_capture = Vec::with_capacity(captures.len());
                 for capture in captures {
-                    locals_to_capture.push(capture.from);
+                    to_capture.push(capture.from);
                 }
 
-                mir::Node::CreateClosure(func_ref, locals_to_capture)
+                mir::Node::CreateClosure(func_ref, to_capture)
             },
 
             ASTValue::Call { name, target, args } => {
@@ -322,6 +322,8 @@ impl ModuleCompiler {
                 mir::Node::CompileTimeRef(export_ref)
             },
             Ok(AccessNameRef::Global(global_ref)) => mir::Node::GlobalRef(global_ref),
+            Ok(AccessNameRef::Capture(capture_ref)) => mir::Node::CaptureRef(capture_ref),
+            Ok(AccessNameRef::Param(param_ref)) => mir::Node::ParamRef(param_ref),
             Ok(AccessNameRef::Local(local_ref)) => mir::Node::LocalGet(local_ref),
         };
 

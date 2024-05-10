@@ -145,6 +145,9 @@ impl <'a> WasmCompiler<'a> {
                 Result(self.make_tuple([t, v]))
             },
 
+            Node::CaptureRef(_) => todo!("Support CaptureRef"),
+            Node::ParamRef(_) => todo!("Support ParamRef"),
+
             Node::LocalSet(local_ref, mir) => {
                 NoResult(match self.compile_mir(mir) {
                     Result(tuple) => BinaryenLocalSet(self.module, local_ref.i as u32, tuple),

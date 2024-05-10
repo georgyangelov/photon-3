@@ -230,12 +230,14 @@ fn test_captures_comptime_local_in_comptime_fn() {
         scope.push_block();
 
         {
-            scope.push_stack_frame();
+            scope.push_stack_frame(vec![]);
             scope.push_block();
 
             let result = scope.access_local("a");
 
-            assert!(matches!(result, Ok(AccessNameRef::Local(_))));
+            println!("{:?}", result);
+
+            assert!(matches!(result, Ok(AccessNameRef::Capture(_))));
 
             scope.pop_block();
 
@@ -244,7 +246,7 @@ fn test_captures_comptime_local_in_comptime_fn() {
             match stack_frame.captures.get(0) {
                 None => panic!("Expected to have a capture"),
                 Some(Capture { from, .. }) => {
-                    assert_eq!(*from, from_ref)
+                    assert_eq!(*from, CaptureFrom::Local(from_ref))
                 }
             }
         }
@@ -268,18 +270,16 @@ fn test_capture_nested_fns_in_comptime() {
         scope.push_block();
 
         {
-            scope.push_stack_frame();
+            scope.push_stack_frame(vec![String::from("a")]);
             scope.push_block();
 
-            let from_ref = scope.define_local(String::from("a"));
-
             {
-                scope.push_stack_frame();
+                scope.push_stack_frame(vec![]);
                 scope.push_block();
 
                 let result = scope.access_local("a");
 
-                assert!(matches!(result, Ok(AccessNameRef::Local(_))));
+                assert!(matches!(result, Ok(AccessNameRef::Capture(_))));
 
                 scope.pop_block();
                 let stack_frame = scope.pop_stack_frame();
@@ -287,7 +287,7 @@ fn test_capture_nested_fns_in_comptime() {
                 match stack_frame.captures.get(0) {
                     None => panic!("Expected to have a capture"),
                     Some(Capture { from, .. }) => {
-                        assert_eq!(*from, from_ref)
+                        assert_eq!(*from, CaptureFrom::Param(ParamRef { i: 0 }))
                     }
                 }
             }
@@ -321,22 +321,15 @@ fn test_use_comptime_in_another_comptime_fn() {
         scope.push_block();
 
         {
-            scope.push_stack_frame();
+            scope.push_stack_frame(vec![String::from("a")]);
             scope.push_block();
 
-            scope.define_local(String::from("a"));
+            scope.define_comptime_main_local(String::from("c"));
 
-            {
-                scope.push_stack_frame();
-                scope.push_block();
+            let result = scope.access_local("c");
 
-                scope.define_comptime_main_local(String::from("c"));
-
-                let result = scope.access_local("c");
-
-                // assert!(matches!(result, Ok(NameRef::Local(_))));
-                assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))));
-            }
+            // assert!(matches!(result, Ok(NameRef::Local(_))));
+            assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))));
         }
     }
 }
@@ -347,7 +340,7 @@ fn new_stack() -> ScopeStack {
         ComptimeMainStackFrame::new()
     );
 
-    stack.push_stack_frame();
+    stack.push_stack_frame(vec![]);
     stack.push_block();
 
     stack
