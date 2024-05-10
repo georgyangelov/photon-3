@@ -1,35 +1,5 @@
 use std::mem::transmute;
 
-/// The repr(C, i32) ensures that the layout of this enum is:
-///
-/// struct Value { type: i32, ... }
-///
-/// Make sure that when adding values, these are always at most 64-bits as we will pass the Value
-/// structs as a tuple of (i32, i64).
-///
-/// See https://github.com/rust-lang/rfcs/blob/master/text/2195-really-tagged-unions.md
-// #[derive(Clone, Debug)]
-// #[repr(C, i32)]
-// pub enum Value {
-//     None,
-//
-//     Bool(bool),
-//     // I32(i32),
-//     I64(i64),
-//     F64(f64),
-//
-//     // Closure(Rc<Closure>)
-//
-//     // String(String),
-//
-//     // Struct()
-// }
-
-// #[repr(transparent)]
-// pub struct Ptr {
-//     pub address: i32
-// }
-
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ValueT {
@@ -47,11 +17,6 @@ pub struct ValueV {
 }
 
 impl ValueV {
-    // #[inline]
-    // pub unsafe fn unwrap_ptr(&self) -> Ptr {
-    //     Ptr { address: self.value as i32 }
-    // }
-
     pub unsafe fn to_literal(self) -> i64 {
         self.value
     }

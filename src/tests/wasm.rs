@@ -28,10 +28,10 @@ fn run(code: &str) -> (ValueT, ValueV) {
     let mut wasm_compiler = WasmCompiler::new(&module);
     let wasm_bytecode = wasm_compiler.compile();
 
-    {
-        let mut file = File::create("target/test.wasm").unwrap();
-        file.write_all(wasm_bytecode.as_slice()).unwrap();
-    }
+    // {
+    //     let mut file = File::create("target/test.wasm").unwrap();
+    //     file.write_all(wasm_bytecode.as_slice()).unwrap();
+    // }
 
     run_wasm(&wasm_bytecode)
 }

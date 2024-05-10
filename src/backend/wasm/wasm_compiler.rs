@@ -148,11 +148,17 @@ impl <'a> WasmCompiler<'a> {
             Node::LocalSet(local_ref, mir) => {
                 NoResult(match self.compile_mir(mir) {
                     Result(tuple) => BinaryenLocalSet(self.module, local_ref.i as u32, tuple),
-                    NoResult(_) => panic!("Should not happen - cannot assign NoResult to variable")
+                    NoResult(expr) => self.make_block(&mut [
+                        expr,
+                        BinaryenLocalSet(self.module, local_ref.i as u32, self.make_const_none_tuple()),
+                    ], false)
                 })
             },
 
             Node::LocalGet(local_ref) => {
+                // TODO: This doesn't support getting parameters
+                // if local_ref.i < arg_locals
+
                 Result(BinaryenLocalGet(self.module, local_ref.i as u32, self.any_type))
             },
 
