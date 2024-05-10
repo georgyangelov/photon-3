@@ -12,6 +12,7 @@ edition = "2021"
 lib = { path = "./lib" }
 wasmtime = "19.0.2"
 binaryen-sys = "0.13.0"
+#llvm-sys = "181.0.0"
 #binaryen_capi-sys = "0.117.0"
 
 #[profile.test]
