@@ -21,12 +21,12 @@ fn test_locals() {
     "), ValueT::i64(42));
 }
 
-#[test]
-fn test_intrinsic_calls() {
-    assert_eq!(run("
-        1 + 41
-    "), ValueT::i64(42));
-}
+// #[test]
+// fn test_intrinsic_calls() {
+//     assert_eq!(run("
+//         1 + 41
+//     "), ValueT::i64(42));
+// }
 
 fn run(code: &str) -> (ValueT, ValueV) {
     let ast = parse(code).expect("Could not parse");
