@@ -7,6 +7,7 @@ pub enum ValueT {
     Bool,
     I64,
     F64,
+    Array,
     // Ptr
 }
 
@@ -14,6 +15,13 @@ pub enum ValueT {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ValueV {
     value: i64
+}
+
+#[repr(C, packed)]
+#[derive(Debug)]
+pub struct ArrayPtr {
+    pub size: i32,
+    pub ptr: i32
 }
 
 impl ValueV {
@@ -47,6 +55,10 @@ impl ValueT {
         (ValueT::F64, ValueV { value: unsafe { transmute(value) } })
     }
 
+    pub fn array(ptr: ArrayPtr) -> (ValueT, ValueV) {
+        (ValueT::Array, ValueV { value: unsafe { transmute(ptr) } })
+    }
+
     pub fn assert_none(self) {
         match self {
             ValueT::None => {},
@@ -73,5 +85,16 @@ impl ValueT {
             ValueT::Bool => v.value != 0,
             _ => panic!("Invalid value type, expected {:?}, got {:?}", ValueT::Bool, self)
         }
+    }
+
+    pub fn assert_array(self, v: ValueV) -> ArrayPtr {
+        match self {
+            ValueT::Array => unsafe { transmute(v.value) },
+            _ => panic!("Invalid value type, expected {:?}, got {:?}", ValueT::Array, self)
+        }
+    }
+
+    pub fn unwrap_array(self, v: ValueV) -> ArrayPtr {
+        unsafe { transmute(v.value) }
     }
 }

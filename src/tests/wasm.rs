@@ -18,7 +18,14 @@ fn test_locals() {
         val b = 11
 
         a
-    "), ValueT::i64(42))
+    "), ValueT::i64(42));
+}
+
+#[test]
+fn test_intrinsic_calls() {
+    assert_eq!(run("
+        1 + 41
+    "), ValueT::i64(42));
 }
 
 fn run(code: &str) -> (ValueT, ValueV) {

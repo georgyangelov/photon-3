@@ -1,79 +1,32 @@
-extern crate wee_alloc;
+// pub mod tests;
 
-use std::alloc::Layout;
+// extern crate wee_alloc;
+
+use lib::{ValueT, ValueV};
 
 // Use `wee_alloc` as the global allocator.
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+// #[global_allocator]
+// static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
 
 #[no_mangle]
-pub extern fn add(a: i64, b: i64) -> i64 {
-    a + b + 1
-}
+extern fn call_fn(
+    name_t: ValueT, name_v: ValueV,
+    // args_t: ValueT, args_v: ValueV
+) -> (ValueT, ValueV) {
+    let name_str_array = name_t.unwrap_array(name_v);
+    // let args_array = args_t.assert_array(args_v);
 
-#[repr(C)]
-pub struct Position {
-    pub x: i64,
-    pub y: i64
-}
+    let name = unsafe {
+        let name_slice = core::slice::from_raw_parts(name_str_array.ptr as *const u8, name_str_array.size as usize);
 
-#[no_mangle]
-pub extern fn new_struct() -> Box<Position> {
-    Box::new(Position { x: 1, y: 2 })
-}
+        // std::str::from_utf8_unchecked(name_slice)
+        core::str::from_utf8_unchecked(name_slice)
+    };
 
-#[no_mangle]
-pub extern fn drop_struct(_: Box<Position>) {
-}
-
-#[no_mangle]
-pub unsafe extern fn allocates(value: i64) -> *mut u8 {
-    // Box::new(Test { one: value })
-
-    let layout = Layout::new::<[u16;2]>();
-    let ptr = std::alloc::alloc(layout);
-
-    ptr
-}
-
-#[no_mangle]
-pub extern fn new_buffer(size: usize) -> Box<Vec<i64>> {
-    let vector = vec![0; size];
-
-    Box::new(vector)
-}
-
-#[no_mangle]
-pub extern fn buffer_read_ptr(buffer: &mut Vec<i64>) -> *mut u8 {
-    buffer.as_mut_ptr() as *mut u8
-}
-
-#[no_mangle]
-pub extern fn buffer_add_two_numbers(buffer: &Vec<i64>) -> i64 {
-    buffer[0] + buffer[1]
-}
-
-#[no_mangle]
-pub extern fn drop_buffer(buffer: Box<Vec<u8>>) {
-}
-
-#[no_mangle]
-pub extern fn build_str_slice() -> &'static str {
-    "Hello world"
-}
-
-#[no_mangle]
-pub extern fn build_string() -> Box<String> {
-    Box::new(String::from("Hello world"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    if name == "++" {
+        ValueT::i64(32)
+    } else {
+        ValueT::i64(1)
     }
 }
