@@ -9,8 +9,12 @@ impl AnonCounter {
         Self { next: 1 }
     }
 
-    pub fn next_str(&mut self) -> CString {
-        let str = CString::new(format!("anon.{}", self.next)).unwrap();
+    pub fn next_anon(&mut self) -> CString {
+        self.next_str("anon")
+    }
+
+    pub fn next_str(&mut self, prefix: &str) -> CString {
+        let str = CString::new(format!("{}.{}", prefix, self.next)).unwrap();
 
         self.next += 1;
 

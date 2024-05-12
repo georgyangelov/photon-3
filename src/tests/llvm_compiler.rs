@@ -18,6 +18,16 @@ fn test_locals() {
     "), Value::int(42));
 }
 
+#[test]
+fn test_add() {
+    assert_eq!(run("
+        val a = 41
+        val b = 1
+
+        a + b
+    "), Value::int(42));
+}
+
 fn run(code: &str) -> Value {
     let ast = parse(code).expect("Could not parse");
     let module = ModuleCompiler::compile_module(ast).expect("Could not compile");
