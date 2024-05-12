@@ -9,8 +9,9 @@ use llvm_sys::error::{LLVMDisposeErrorMessage, LLVMGetErrorMessage};
 use llvm_sys::LLVMLinkage::LLVMExternalLinkage;
 use llvm_sys::{LLVMDiagnosticHandler, LLVMVisibility};
 use llvm_sys::execution_engine::{LLVMCreateExecutionEngineForModule, LLVMExecutionEngineRef};
-use llvm_sys::orc2::lljit::{LLVMOrcCreateLLJIT, LLVMOrcCreateLLJITBuilder, LLVMOrcDisposeLLJITBuilder, LLVMOrcLLJITAddLLVMIRModule, LLVMOrcLLJITGetExecutionSession, LLVMOrcLLJITGetMainJITDylib, LLVMOrcLLJITLookup, LLVMOrcLLJITRef};
-use llvm_sys::orc2::{LLVMOrcCJITDylibSearchOrder, LLVMOrcCreateNewThreadSafeContext, LLVMOrcCreateNewThreadSafeModule, LLVMOrcDisposeThreadSafeContext, LLVMOrcExecutionSessionCreateJITDylib, LLVMOrcExecutionSessionLookup, LLVMOrcExecutorAddress, LLVMOrcJITDylibCreateResourceTracker, LLVMOrcJITDylibRef, LLVMOrcLookupKind, LLVMOrcThreadSafeContextGetContext};
+use llvm_sys::orc2::lljit::{LLVMOrcCreateLLJIT, LLVMOrcCreateLLJITBuilder, LLVMOrcDisposeLLJITBuilder, LLVMOrcLLJITAddLLVMIRModule, LLVMOrcLLJITGetExecutionSession, LLVMOrcLLJITGetGlobalPrefix, LLVMOrcLLJITGetMainJITDylib, LLVMOrcLLJITLookup, LLVMOrcLLJITMangleAndIntern, LLVMOrcLLJITRef};
+use llvm_sys::orc2::{LLVMJITEvaluatedSymbol, LLVMJITSymbolFlags, LLVMJITSymbolTargetFlags, LLVMOrcAbsoluteSymbols, LLVMOrcCJITDylibSearchOrder, LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess, LLVMOrcCreateNewThreadSafeContext, LLVMOrcCreateNewThreadSafeModule, LLVMOrcCSymbolMapPair, LLVMOrcDisposeThreadSafeContext, LLVMOrcExecutionSessionCreateJITDylib, LLVMOrcExecutionSessionIntern, LLVMOrcExecutionSessionLookup, LLVMOrcExecutorAddress, LLVMOrcJITDylibAddGenerator, LLVMOrcJITDylibCreateResourceTracker, LLVMOrcJITDylibDefine, LLVMOrcJITDylibRef, LLVMOrcLookupKind, LLVMOrcThreadSafeContextGetContext};
+use llvm_sys::orc2::LLVMJITSymbolGenericFlags::LLVMJITSymbolGenericFlagsExported;
 use llvm_sys::prelude::LLVMDiagnosticInfoRef;
 use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
@@ -31,6 +32,10 @@ pub extern "C" fn diagnostic_handler(arg1: LLVMDiagnosticInfoRef, arg2: *mut ffi
     }
 }
 
+pub extern "C" fn host_add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
 pub unsafe fn llvm_test() {
     let thread_safe_context = LLVMOrcCreateNewThreadSafeContext();
     let context = LLVMOrcThreadSafeContextGetContext(thread_safe_context);
@@ -42,10 +47,15 @@ pub unsafe fn llvm_test() {
 
     // let void_type = LLVMVoidTypeInContext(context);
 
+    let mut host_add_params = [LLVMInt64TypeInContext(context), LLVMInt64TypeInContext(context)];
+    let host_add_type = LLVMFunctionType(LLVMInt64TypeInContext(context), host_add_params.as_mut_ptr(), 2, 0);
+    let host_add_ref = LLVMAddFunction(module, c_str!("host_add"), host_add_type);
+
+
     // `main` function
     {
         // let i32 = LLVMInt32TypeInContext(context);
-        // let i64 = LLVMInt64TypeInContext(context);
+        let i64 = LLVMInt64TypeInContext(context);
 
         // let value_type = LLVMStructCreateNamed(context, c_str!("value"));
         // LLVMStructSetBody(value_type, [i32, i64].as_mut_ptr(), 2, 1);
@@ -59,8 +69,11 @@ pub unsafe fn llvm_test() {
         let main_block = LLVMAppendBasicBlockInContext(context, main_func, c_str!("main_block"));
         LLVMPositionBuilderAtEnd(builder, main_block);
 
-        // let a = LLVMConstInt(i32, 41, 1);
-        let b = LLVMConstInt(LLVMInt64TypeInContext(context), 2, 1);
+        let a = LLVMConstInt(i64, 41, 1);
+        let b = LLVMConstInt(i64, 1, 1);
+
+        let mut args = [a, b];
+        let result = LLVMBuildCall2(builder, host_add_type, host_add_ref, args.as_mut_ptr(), 2, c_str!("call_host_add"));
 
         // let result = LLVMBuildAdd(builder, a, b, c_str!("test"));
 
@@ -80,7 +93,7 @@ pub unsafe fn llvm_test() {
         // LLVMAddTargetDependentFunctionAttr(main_func, c_str!("target-features"), c_str!("+multivalue,+tail-call"));
 
         // let add_result = LLVMBuildAdd(builder, b, b, c_str!("add_result"));
-        LLVMBuildRet(builder, b);
+        LLVMBuildRet(builder, result);
 
         // let load = LLVMBuildLoad2(builder, value_type, result_struct, c_str!("res"));
         // LLVMBuildRet(builder, load);
@@ -207,6 +220,33 @@ pub unsafe fn llvm_test() {
         if !error_ref.is_null() {
             let error_message = LLVMGetErrorMessage(error_ref);
             panic!("Could not add module to JIT: {}", CString::from_raw(error_message).into_string().unwrap());
+        }
+
+        // LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(search_generator, LLVMOrcLLJITGetGlobalPrefix(jit), )
+        // LLVMOrcJITDylibAddGenerator(dylib, );
+
+        // let host_add_name = LLVMOrcExecutionSessionIntern(es, c_str!("_host_add"));
+        let host_add_name = LLVMOrcLLJITMangleAndIntern(jit, c_str!("host_add"));
+        let host_add_symbol = LLVMJITEvaluatedSymbol {
+            Address: host_add as *const () as u64,
+            Flags: LLVMJITSymbolFlags {
+                GenericFlags: LLVMJITSymbolGenericFlagsExported as u8,
+                TargetFlags: LLVMJITSymbolGenericFlagsExported as u8
+            }
+        };
+
+        let mut symbols = [
+            LLVMOrcCSymbolMapPair { Name: host_add_name, Sym: host_add_symbol, }
+        ];
+
+        let materialization_unit = LLVMOrcAbsoluteSymbols(symbols.as_mut_ptr(), symbols.len());
+
+
+
+        let error_ref = LLVMOrcJITDylibDefine(dylib, materialization_unit);
+        if !error_ref.is_null() {
+            let error_message = LLVMGetErrorMessage(error_ref);
+            panic!("Could not link to parent: {}", CString::from_raw(error_message).into_string().unwrap());
         }
 
         // let tracker = LLVMOrcJITDylibCreateResourceTracker(dylib);
