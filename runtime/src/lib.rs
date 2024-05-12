@@ -31,8 +31,7 @@
 //     }
 // }
 
-use std::ffi::{c_char, CStr};
-use std::ptr::slice_from_raw_parts;
+use std::ffi::{CStr};
 use lib::Value;
 
 pub extern fn call(name: *const i8, args: *const Value, arg_count: u64) -> Value {

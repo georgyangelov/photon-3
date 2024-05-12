@@ -1,23 +1,21 @@
 use std::collections::HashMap;
-use std::ffi::{c_char, c_int, c_uint, c_ulonglong, CString};
+use std::ffi::{c_char, c_uint, c_ulonglong, CString};
 use std::ptr;
 use llvm_sys::analysis::*;
 use llvm_sys::core::*;
 use llvm_sys::error::LLVMGetErrorMessage;
-use llvm_sys::execution_engine::LLVMGetExecutionEngineTargetMachine;
 use llvm_sys::orc2::*;
 use llvm_sys::orc2::lljit::*;
 use llvm_sys::prelude::*;
 use llvm_sys::target::*;
-use llvm_sys::target_machine::{LLVMCodeGenOptLevel, LLVMCreateTargetMachineOptions, LLVMCreateTargetMachineWithOptions, LLVMGetTargetFromTriple, LLVMTargetMachineOptionsSetCodeGenOptLevel, LLVMTargetRef};
-use llvm_sys::transforms::pass_builder::{LLVMCreatePassBuilderOptions, LLVMRunPasses};
+use llvm_sys::target_machine::*;
+use llvm_sys::transforms::pass_builder::*;
 use lib::Value;
 use crate::backend::llvm::anon_id::AnonCounter;
 use crate::backend::llvm::ref_table::RefTable;
 use crate::compiler;
 use crate::compiler::mir;
 use crate::compiler::mir::Node;
-use crate::llvm_test::host_add;
 
 pub struct LLVMJITCompiler<'a> {
     mir_module: &'a compiler::Module,
@@ -208,6 +206,7 @@ impl <'a> LLVMJITCompiler<'a> {
             Node::ParamRef(param_ref) => Some(LLVMGetParam(func_ref, param_ref.i as c_uint)),
             Node::CaptureRef(_) => todo!("Support CaptureRef"),
 
+            // TODO: Make these use IR registers instead of alloca
             Node::LocalSet(local_ref, value_mir) => {
                 let value_ref = self.compile_mir(func, func_ref, builder, local_refs, anon_counter, value_mir);
                 let local_ref = local_refs.table[local_ref.i];
@@ -233,6 +232,7 @@ impl <'a> LLVMJITCompiler<'a> {
                 result
             },
 
+            // TODO: Cleanup
             Node::Call(name, target_mir, arg_mirs) => {
                 let mut args = Vec::with_capacity(arg_mirs.len() + 1);
 
@@ -270,7 +270,7 @@ impl <'a> LLVMJITCompiler<'a> {
                         arg_array_type,
                         args_array_ref,
                         [
-                            LLVMConstInt(LLVMInt64TypeInContext(self.context), 0 as u64, 0),
+                            LLVMConstInt(LLVMInt64TypeInContext(self.context), 0, 0),
                             LLVMConstInt(LLVMInt64TypeInContext(self.context), i as u64, 0)
                         ].as_mut_ptr(),
                         2,
@@ -286,9 +286,9 @@ impl <'a> LLVMJITCompiler<'a> {
                     args_array_ref,
                     [
                         LLVMConstInt(LLVMInt64TypeInContext(self.context), 0, 0),
-                        LLVMConstInt(LLVMInt64TypeInContext(self.context), 0, 0)
+                        // LLVMConstInt(LLVMInt64TypeInContext(self.context), 0, 0)
                     ].as_mut_ptr(),
-                    2,
+                    1,
                     ptr_to_args_array_name.as_ptr()
                 );
                 let mut args_array = [
@@ -299,13 +299,15 @@ impl <'a> LLVMJITCompiler<'a> {
 
                 let call_fn = &self.intrinsic_fns["call"];
 
+                // TODO: Better names
                 let call_name = anon_counter.next_anon();
                 let call = LLVMBuildCall2(
                     builder,
                     call_fn.type_ref,
                     call_fn.func_ref,
                     args_array.as_mut_ptr(),
-                    args_array.len() as c_uint, call_name.as_ptr()
+                    args_array.len() as c_uint,
+                    call_name.as_ptr()
                 );
 
                 Some(call)
