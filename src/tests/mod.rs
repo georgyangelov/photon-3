@@ -3,3 +3,4 @@ mod parser;
 mod scope;
 mod interpreter;
 mod wasm;
+mod llvm_compiler;

@@ -1,15 +1,6 @@
-use crate::compiler;
+mod llvm_jit_compiler;
+mod ref_table;
+mod anon_id;
 
-struct LLVMCompiler<'a> {
-    mir_module: &'a compiler::Module,
-}
+pub use llvm_jit_compiler::*;
 
-impl <'a> LLVMCompiler<'a> {
-    pub fn new(mir_module: &'a compiler::Module) -> Self {
-        LLVMCompiler { mir_module }
-    }
-
-    pub fn compile_to_wasm(&mut self) -> Vec<u8> {
-        todo!()
-    }
-}

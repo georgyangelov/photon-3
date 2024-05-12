@@ -230,8 +230,8 @@ pub unsafe fn llvm_test() {
         let host_add_symbol = LLVMJITEvaluatedSymbol {
             Address: host_add as *const () as u64,
             Flags: LLVMJITSymbolFlags {
-                GenericFlags: LLVMJITSymbolGenericFlagsExported as u8,
-                TargetFlags: LLVMJITSymbolGenericFlagsExported as u8
+                GenericFlags: 0, // LLVMJITSymbolGenericFlagsExported as u8,
+                TargetFlags: 0, // LLVMJITSymbolGenericFlagsExported as u8
             }
         };
 
