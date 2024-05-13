@@ -268,21 +268,9 @@ impl <'a> LLVMJITCompiler<'a> {
                     LLVMBuildStore(fb.builder, arg_ref, ptr_to_args_array_element);
                 }
 
-                let ptr_to_args_array_name = fb.stmt_name_gen.next("args_ptr");
-                let ptr_to_args_array = LLVMBuildGEP2(
-                    fb.builder,
-                    arg_array_type,
-                    args_array_ref,
-                    [
-                        LLVMConstInt(LLVMInt64TypeInContext(self.context), 0, 0),
-                        // LLVMConstInt(LLVMInt64TypeInContext(self.context), 0, 0)
-                    ].as_mut_ptr(),
-                    1,
-                    ptr_to_args_array_name.as_ptr()
-                );
                 let mut args_array = [
                     name_ref,
-                    ptr_to_args_array,
+                    args_array_ref,
                     LLVMConstInt(LLVMInt64TypeInContext(self.context), arg_count as u64, 0)
                 ];
 
