@@ -31,8 +31,9 @@
 //     }
 // }
 
+use std::alloc::Layout;
 use std::ffi::{CStr};
-use lib::Value;
+use lib::{Value, ValueT};
 
 pub extern fn call(name: *const i8, args: *const Value, arg_count: u64) -> Value {
     unsafe {
@@ -44,8 +45,24 @@ pub extern fn call(name: *const i8, args: *const Value, arg_count: u64) -> Value
 
         if name == c"+" {
             Value::int(args[0].assert_int() + args[1].assert_int())
+        } else if name == c"call" && args[0].typ == ValueT::Closure {
+            let this = args[0];
+
+            match arg_count - 1 {
+                0 => this.fn_0()(),
+                1 => this.fn_1()(args[1]),
+                2 => this.fn_2()(args[1], args[2]),
+                3 => this.fn_3()(args[1], args[2], args[3]),
+                _ => panic!("Functions with more than 3 parameters are not supported")
+            }
         } else {
             panic!("Unknown function {}", name.to_str().unwrap())
         }
     }
+}
+
+pub extern fn malloc(size: usize) -> *mut u8 {
+    let res = unsafe { std::alloc::alloc(Layout::array::<u8>(size).unwrap()) };
+
+    res
 }

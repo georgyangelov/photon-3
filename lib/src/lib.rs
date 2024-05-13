@@ -3,17 +3,20 @@ mod old_value;
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Value {
-    typ: ValueT,
+    pub typ: ValueT,
     val: i64
 }
 
 #[repr(i32)]
 #[derive(Debug, Copy, Clone, PartialEq)]
-enum ValueT {
+pub enum ValueT {
     None,
     Bool,
     Int,
-    Float
+    Float,
+
+    // TODO: Optimization idea - another variant with no captures that points directly to the function
+    Closure
 }
 
 impl Value {
@@ -72,5 +75,36 @@ impl Value {
             Value { typ: ValueT::Float, val } => unsafe { std::mem::transmute(val) },
             _ => panic!("Invalid value: expected {:?}, got {:?}", ValueT::Float, self.typ)
         }
+    }
+
+    pub fn assert_closure(self) -> *mut u8 {
+        match self {
+            Value { typ: ValueT::Float, val } => unsafe { std::mem::transmute(val) },
+            _ => panic!("Invalid value: expected {:?}, got {:?}", ValueT::Float, self.typ)
+        }
+    }
+
+    pub unsafe fn fn_0(self) -> extern "C" fn() -> Value {
+        let ptr_to_ptr_to_fn: *const extern "C" fn() -> Value = std::mem::transmute(self.val);
+
+        *ptr_to_ptr_to_fn
+    }
+
+    pub unsafe fn fn_1(self) -> extern "C" fn(Value) -> Value {
+        let ptr_to_ptr_to_fn: *const extern "C" fn(Value) -> Value = std::mem::transmute(self.val);
+
+        *ptr_to_ptr_to_fn
+    }
+
+    pub unsafe fn fn_2(self) -> extern "C" fn(Value, Value) -> Value {
+        let ptr_to_ptr_to_fn: *const extern "C" fn(Value, Value) -> Value = std::mem::transmute(self.val);
+
+        *ptr_to_ptr_to_fn
+    }
+
+    pub unsafe fn fn_3(self) -> extern "C" fn(Value, Value, Value) -> Value {
+        let ptr_to_ptr_to_fn: *const extern "C" fn(Value, Value, Value) -> Value = std::mem::transmute(self.val);
+
+        *ptr_to_ptr_to_fn
     }
 }

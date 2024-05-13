@@ -9,11 +9,15 @@ impl SymbolNameCounter {
         Self { next_id: 1 }
     }
 
-    pub fn next(&mut self, prefix: &str) -> CString {
-        let str = CString::new(format!("{}.{}", prefix, self.next_id)).unwrap();
+    pub fn next_string(&mut self, prefix: &str) -> String {
+        let name = format!("{}.{}", prefix, self.next_id);
 
         self.next_id += 1;
 
-        str
+        name
+    }
+
+    pub fn next(&mut self, prefix: &str) -> CString {
+        CString::new(self.next_string(prefix)).unwrap()
     }
 }

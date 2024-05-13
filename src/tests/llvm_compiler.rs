@@ -1,3 +1,5 @@
+use std::io;
+use std::io::Write;
 use lib::Value;
 use crate::backend::llvm::LLVMJITCompiler;
 use crate::compiler::ModuleCompiler;
@@ -28,6 +30,15 @@ fn test_add() {
     "), Value::int(42));
 }
 
+#[test]
+fn test_fns() {
+    assert_eq!(run("
+        val add = (a, b) a + b
+
+        add(1, 41)
+    "), Value::int(42));
+}
+
 fn run(code: &str) -> Value {
     let ast = parse(code).expect("Could not parse");
     let module = ModuleCompiler::compile_module(ast).expect("Could not compile");
@@ -35,12 +46,13 @@ fn run(code: &str) -> Value {
     let mut jit = LLVMJITCompiler::new(&module);
     let main_fn = jit.compile();
 
+    io::stdout().flush().unwrap();
+
     // let mut result = Value::none();
 
     // unsafe { (*main_fn)(&mut result) };
-    let result = unsafe { main_fn() };
-
-    result
+    unsafe { main_fn() }
+    // Value::none()
 }
 
 fn parse(code: &str) -> Result<AST, ParseError> {

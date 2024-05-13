@@ -10,11 +10,12 @@ use llvm_sys::prelude::*;
 use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
-use lib::Value;
+use lib::{Value, ValueT};
 use crate::backend::llvm::host_fn::HostFn;
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::backend::llvm::ref_table::RefTable;
 use crate::compiler;
+use crate::compiler::lexical_scope::{CaptureFrom, StackFrameLocalRef};
 use crate::compiler::mir;
 use crate::compiler::mir::Node;
 
@@ -30,7 +31,8 @@ pub struct LLVMJITCompiler<'a> {
 
     host_fns: HashMap<String, HostFn>,
     
-    str_const_name_gen: SymbolNameCounter
+    str_const_name_gen: SymbolNameCounter,
+    func_name_gen: SymbolNameCounter
 }
 
 macro_rules! c_str {
@@ -79,6 +81,18 @@ impl <'a> LLVMJITCompiler<'a> {
                         0
                     ),
                     runtime::call as *const ()
+                ),
+
+                HostFn::new_pair(
+                    module,
+                    "mallocc",
+                    LLVMFunctionType(
+                        LLVMPointerTypeInContext(context, 0 as c_uint),
+                        [LLVMInt64TypeInContext(context)].as_mut_ptr(),
+                        1,
+                        0
+                    ),
+                    runtime::malloc as *const ()
                 )
             ]);
 
@@ -101,6 +115,7 @@ impl <'a> LLVMJITCompiler<'a> {
 
                 host_fns,
                 str_const_name_gen: SymbolNameCounter::new(),
+                func_name_gen: SymbolNameCounter::new(),
             }
         }
     }
@@ -205,10 +220,7 @@ impl <'a> LLVMJITCompiler<'a> {
                 None
             },
             Node::LocalGet(local_ref) => {
-                let local_ref = fb.local_refs.table[local_ref.i];
-                let name = fb.stmt_name_gen.next("local_get");
-
-                Some(LLVMBuildLoad2(fb.builder, LLVMGetAllocatedType(local_ref), local_ref, name.as_ptr()))
+                Some(self.build_load_local(fb, local_ref))
             },
 
             Node::Block(mirs) => {
@@ -256,13 +268,99 @@ impl <'a> LLVMJITCompiler<'a> {
                 Some(call)
             }
 
-            Node::CreateClosure(_, _) => todo!("Support CreateClosure"),
+            Node::CreateClosure(mir_func_ref, captures) => {
+                // TODO: Infer the function name from the assignment
+                let func_name = self.func_name_gen.next_string("fn");
+                let func = &self.mir_module.functions[mir_func_ref.i];
+
+                let func_ref = self.compile_fn(func, &func_name);
+
+                let closure_t = self.closure_struct_type(captures.len());
+                let closure_ptr = self.build_malloc(fb, LLVMSizeOf(closure_t));
+
+                let ptr = self.build_gep(fb, closure_t, closure_ptr, &mut [
+                    self.const_u64(0)
+                ]);
+                LLVMBuildStore(fb.builder, func_ref, ptr);
+
+                for (i, capture) in captures.iter().enumerate() {
+                    let captured_value_ref = match capture {
+                        CaptureFrom::Capture(_) => todo!("Support capture captures"),
+                        CaptureFrom::Param(_) => todo!("Support param captures"),
+                        CaptureFrom::Local(local_ref) => self.build_load_local(fb, local_ref)
+                    };
+
+                    let ptr = self.build_gep(fb, closure_t, closure_ptr, &mut [
+                        self.const_u64((i + 1) as u64),
+                    ]);
+                    LLVMBuildStore(fb.builder, captured_value_ref, ptr);
+                }
+
+                let result = self.build_ptr_value(fb, ValueT::Closure, closure_ptr);
+
+                Some(result)
+            },
+
             Node::If(_, _, _) => todo!("Support If")
         }
     }
 
+    unsafe fn build_ptr_value(&self, fb: &mut FunctionBuilder, typ: ValueT, ptr_value_ref: LLVMValueRef) -> LLVMValueRef {
+        let name = fb.stmt_name_gen.next("value");
+        let value_ref = LLVMBuildAlloca(fb.builder, self.value_t, name.as_ptr());
+
+        let ptr = self.build_gep(fb, self.value_t, value_ref, &mut [self.const_i32(0), self.const_i32(0)]);
+        LLVMBuildStore(fb.builder, self.const_i32(std::mem::transmute(typ)), ptr);
+
+        let ptr = self.build_gep(fb, self.value_t, value_ref, &mut [self.const_i32(0), self.const_i32(1)]);
+
+        let name = fb.stmt_name_gen.next("ptr_to_int");
+        let ptr_value_int_ref = LLVMBuildPtrToInt(fb.builder, ptr_value_ref, LLVMInt64TypeInContext(self.context), name.as_ptr());
+        LLVMBuildStore(fb.builder, ptr_value_int_ref, ptr);
+
+        let name = fb.stmt_name_gen.next("value_load");
+        LLVMBuildLoad2(fb.builder, self.value_t, value_ref, name.as_ptr())
+    }
+
+    unsafe fn build_load_local(&self, fb: &mut FunctionBuilder, local_ref: &StackFrameLocalRef) -> LLVMValueRef {
+        let local_ref = fb.local_refs.table[local_ref.i];
+        let name = fb.stmt_name_gen.next("local_get");
+
+        LLVMBuildLoad2(fb.builder, LLVMGetAllocatedType(local_ref), local_ref, name.as_ptr())
+    }
+
+    unsafe fn build_gep(&self, fb: &mut FunctionBuilder, type_ref: LLVMTypeRef, ptr_ref: LLVMValueRef, indices: &mut [LLVMValueRef]) -> LLVMValueRef {
+        let name = fb.stmt_name_gen.next("struct_ptr");
+
+        LLVMBuildGEP2(fb.builder, type_ref, ptr_ref, indices.as_mut_ptr(), indices.len() as u32, name.as_ptr())
+    }
+
+    unsafe fn build_malloc(&self, fb: &mut FunctionBuilder, size: LLVMValueRef) -> LLVMValueRef {
+        let malloc = &self.host_fns["mallocc"];
+        let name = fb.stmt_name_gen.next("malloc");
+
+        LLVMBuildCall2(fb.builder, malloc.type_ref, malloc.func_ref, [size].as_mut_ptr(), 1, name.as_ptr())
+    }
+
+    unsafe fn closure_struct_type(&self, capture_count: usize) -> LLVMTypeRef {
+        let mut fields = Vec::with_capacity(1 + capture_count);
+
+        // Function pointer
+        fields.push(LLVMPointerTypeInContext(self.context, 0));
+
+        for _ in 0..capture_count {
+            fields.push(self.value_t);
+        }
+
+        LLVMStructTypeInContext(self.context, fields.as_mut_ptr(), fields.len() as u32, 0)
+    }
+
     unsafe fn const_u64(&self, value: u64) -> LLVMValueRef {
         LLVMConstInt(LLVMInt64TypeInContext(self.context), value, 0)
+    }
+
+    unsafe fn const_i32(&self, value: i32) -> LLVMValueRef {
+        LLVMConstInt(LLVMInt32TypeInContext(self.context), value as u64, 1)
     }
 
     unsafe fn build_args_array(&self, fb: &mut FunctionBuilder, args: Vec<LLVMValueRef>) -> (LLVMValueRef, u64) {

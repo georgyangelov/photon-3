@@ -11,10 +11,7 @@ edition = "2021"
 [dependencies]
 lib = { path = "./lib" }
 runtime = { path = "./runtime" }
-#wasmtime = "19.0.2"
-#binaryen-sys = "0.13.0"
 llvm-sys = "181.0.0"
-#binaryen_capi-sys = "0.117.0"
 
 #[profile.test]
 #opt-level = 2
