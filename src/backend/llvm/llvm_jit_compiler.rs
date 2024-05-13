@@ -221,7 +221,6 @@ impl <'a> LLVMJITCompiler<'a> {
                 result
             },
 
-            // TODO: Cleanup
             Node::Call(name, target_mir, arg_mirs) => {
                 let mut args = Vec::with_capacity(arg_mirs.len() + 1);
 
@@ -234,49 +233,16 @@ impl <'a> LLVMJITCompiler<'a> {
                     args.push(self.coalesce_value(value_ref));
                 }
 
-                let name_ref_name = self.str_const_name_gen.next("str");
-                let c_name = CString::new(name.as_bytes()).unwrap();
-                // let name_global_ref = LLVMAddGlobal(self.module, LLVMPointerTypeInContext(self.context, 0), name_ref_name.as_ptr());
-                // LLVMSetGlobalConstant(name_global_ref, 1);
-                let name_ref = LLVMBuildGlobalStringPtr(fb.builder, c_name.as_ptr(), name_ref_name.as_ptr());
-
-                // let name_ref = LLVMData
-
-                // let ptr_to_name_ref = LLVMConstStringInContext(self.context, name.as_ptr() as *const c_char, name.len() as u32, 0);
-
-                let arg_array_type = LLVMArrayType2(self.value_t, args.len() as u64);
-
-                // let args_array_ref = LLVMConstArray2(self.value_t, args.as_mut_ptr(), args.len() as u64);
-                let args_array_ref_name = fb.stmt_name_gen.next("args");
-                let args_array_ref = LLVMBuildAlloca(fb.builder, arg_array_type, args_array_ref_name.as_ptr());
-
-                let arg_count = args.len();
-
-                for (i, arg_ref) in args.into_iter().enumerate() {
-                    let n = fb.stmt_name_gen.next("arg");
-                    let ptr_to_args_array_element = LLVMBuildGEP2(
-                        fb.builder,
-                        arg_array_type,
-                        args_array_ref,
-                        [
-                            LLVMConstInt(LLVMInt64TypeInContext(self.context), 0, 0),
-                            LLVMConstInt(LLVMInt64TypeInContext(self.context), i as u64, 0)
-                        ].as_mut_ptr(),
-                        2,
-                        n.as_ptr()
-                    );
-                    LLVMBuildStore(fb.builder, arg_ref, ptr_to_args_array_element);
-                }
+                let (args_array_ref, arg_count) = self.build_args_array(fb, args);
 
                 let mut args_array = [
-                    name_ref,
+                    self.build_str_global_const_ref(fb.builder, name),
                     args_array_ref,
-                    LLVMConstInt(LLVMInt64TypeInContext(self.context), arg_count as u64, 0)
+                    self.const_u64(arg_count)
                 ];
 
                 let call_fn = &self.host_fns["call"];
 
-                // TODO: Better names
                 let call_name = fb.stmt_name_gen.next("result");
                 let call = LLVMBuildCall2(
                     fb.builder,
@@ -293,6 +259,44 @@ impl <'a> LLVMJITCompiler<'a> {
             Node::CreateClosure(_, _) => todo!("Support CreateClosure"),
             Node::If(_, _, _) => todo!("Support If")
         }
+    }
+
+    unsafe fn const_u64(&self, value: u64) -> LLVMValueRef {
+        LLVMConstInt(LLVMInt64TypeInContext(self.context), value, 0)
+    }
+
+    unsafe fn build_args_array(&self, fb: &mut FunctionBuilder, args: Vec<LLVMValueRef>) -> (LLVMValueRef, u64) {
+        let arg_array_type = LLVMArrayType2(self.value_t, args.len() as u64);
+
+        let args_array_ref_name = fb.stmt_name_gen.next("args");
+        let args_array_ref = LLVMBuildAlloca(fb.builder, arg_array_type, args_array_ref_name.as_ptr());
+
+        let arg_count = args.len();
+
+        for (i, arg_ref) in args.into_iter().enumerate() {
+            let n = fb.stmt_name_gen.next("arg");
+            let ptr_to_args_array_element = LLVMBuildGEP2(
+                fb.builder,
+                arg_array_type,
+                args_array_ref,
+                [
+                    self.const_u64(0),
+                    self.const_u64(i as u64)
+                ].as_mut_ptr(),
+                2,
+                n.as_ptr()
+            );
+            LLVMBuildStore(fb.builder, arg_ref, ptr_to_args_array_element);
+        }
+
+        (args_array_ref, arg_count as u64)
+    }
+
+    unsafe fn build_str_global_const_ref(&mut self, builder: LLVMBuilderRef, str: &str) -> LLVMValueRef {
+        let name_ref_name = self.str_const_name_gen.next("str");
+        let c_name = CString::new(str.as_bytes()).unwrap();
+
+        LLVMBuildGlobalStringPtr(builder, c_name.as_ptr(), name_ref_name.as_ptr())
     }
 
     unsafe fn make_const_value(&self, value: Value) -> LLVMValueRef {
