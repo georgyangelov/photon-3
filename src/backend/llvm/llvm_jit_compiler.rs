@@ -11,7 +11,8 @@ use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
 use lib::Value;
-use crate::backend::llvm::anon_id::AnonCounter;
+use crate::backend::llvm::extern_fn::HostFn;
+use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::backend::llvm::ref_table::RefTable;
 use crate::compiler;
 use crate::compiler::mir;
@@ -27,7 +28,9 @@ pub struct LLVMJITCompiler<'a> {
 
     value_t: LLVMTypeRef,
 
-    intrinsic_fns: HashMap<String, IntrinsicFn>
+    host_fns: HashMap<String, HostFn>,
+    
+    str_const_name_gen: SymbolNameCounter
 }
 
 macro_rules! c_str {
@@ -36,32 +39,13 @@ macro_rules! c_str {
     );
 }
 
-// macro_rules! c_str_format {
-//     ($($arg:tt)*) => (
-//         CString::new(format!($($arg)*)).into()
-//     );
-// }
+pub struct FunctionBuilder {
+    local_refs: RefTable,
 
-struct IntrinsicFn {
-    type_ref: LLVMTypeRef,
+    stmt_name_gen: SymbolNameCounter,
+
     func_ref: LLVMValueRef,
-    func_addr: *const ()
-}
-
-impl IntrinsicFn {
-    unsafe fn new(module: LLVMModuleRef, name: &str, type_ref: LLVMTypeRef, func_addr: *const ()) -> Self {
-        let name = CString::new(name).unwrap();
-
-        Self {
-            type_ref,
-            func_ref: LLVMAddFunction(module, name.as_ptr(), type_ref),
-            func_addr
-        }
-    }
-
-    unsafe fn new_pair(module: LLVMModuleRef, name: &str, type_ref: LLVMTypeRef, func_addr: *const ()) -> (String, Self) {
-        (String::from(name), Self::new(module, name, type_ref, func_addr))
-    }
+    builder: LLVMBuilderRef,
 }
 
 impl <'a> LLVMJITCompiler<'a> {
@@ -80,8 +64,8 @@ impl <'a> LLVMJITCompiler<'a> {
                 LLVMInt64TypeInContext(context)
             ].as_mut_ptr(), 2, 0);
 
-            let intrinsic_fns = HashMap::from([
-                IntrinsicFn::new_pair(
+            let host_fns = HashMap::from([
+                HostFn::new_pair(
                     module,
                     "call",
                     LLVMFunctionType(
@@ -115,7 +99,8 @@ impl <'a> LLVMJITCompiler<'a> {
 
                 value_t,
 
-                intrinsic_fns
+                host_fns,
+                str_const_name_gen: SymbolNameCounter::new(),
             }
         }
     }
@@ -144,7 +129,7 @@ impl <'a> LLVMJITCompiler<'a> {
         }
     }
 
-    unsafe fn compile_fn(&self, func: &mir::Function, name: &str) -> LLVMValueRef {
+    unsafe fn compile_fn(&mut self, func: &mir::Function, name: &str) -> LLVMValueRef {
         let mut param_types = Vec::new();
         for _ in 0..func.param_count {
             param_types.push(self.value_t);
@@ -154,9 +139,9 @@ impl <'a> LLVMJITCompiler<'a> {
         // let fn_type = LLVMFunctionType(LLVMVoidTypeInContext(self.context), param_types.as_mut_ptr(), func.param_count as c_uint, 0);
 
         let fn_name = CString::new(name).unwrap();
-        let fn_ref = LLVMAddFunction(self.module, fn_name.as_ptr(), fn_type);
+        let func_ref = LLVMAddFunction(self.module, fn_name.as_ptr(), fn_type);
 
-        let entry_block = LLVMAppendBasicBlockInContext(self.context, fn_ref, c_str!("entry"));
+        let entry_block = LLVMAppendBasicBlockInContext(self.context, func_ref, c_str!("entry"));
         let builder = LLVMCreateBuilderInContext(self.context);
 
         LLVMPositionBuilderAtEnd(builder, entry_block);
@@ -168,9 +153,16 @@ impl <'a> LLVMJITCompiler<'a> {
             local_refs.table.push(LLVMBuildAlloca(builder, self.value_t, local_name.as_ptr()));
         }
 
-        let mut anon_counter = AnonCounter::new();
+        let mut function_builder = FunctionBuilder {
+            local_refs,
+            
+            stmt_name_gen: SymbolNameCounter::new(),
 
-        let result = self.compile_mir(func, fn_ref, builder, &mut local_refs, &mut anon_counter, &func.body);
+            func_ref,
+            builder,
+        };
+
+        let result = self.compile_mir(func, &mut function_builder, &func.body);
         let result = match result {
             None => self.make_const_value(Value::none()),
             Some(result) => result
@@ -179,16 +171,13 @@ impl <'a> LLVMJITCompiler<'a> {
         LLVMBuildRet(builder, result);
         // LLVMBuildRetVoid(builder);
 
-        fn_ref
+        func_ref
     }
 
     unsafe fn compile_mir(
-        &self,
+        &mut self,
         func: &mir::Function,
-        func_ref: LLVMValueRef,
-        builder: LLVMBuilderRef,
-        local_refs: &mut RefTable,
-        anon_counter: &mut AnonCounter,
+        fb: &mut FunctionBuilder,
         mir: &mir::MIR
     ) -> Option<LLVMValueRef> {
         match &mir.node {
@@ -203,30 +192,30 @@ impl <'a> LLVMJITCompiler<'a> {
             Node::LiteralI64(value) => Some(self.make_const_value(Value::int(*value))),
             Node::LiteralF64(value) => Some(self.make_const_value(Value::float(*value))),
 
-            Node::ParamRef(param_ref) => Some(LLVMGetParam(func_ref, param_ref.i as c_uint)),
+            Node::ParamRef(param_ref) => Some(LLVMGetParam(fb.func_ref, param_ref.i as c_uint)),
             Node::CaptureRef(_) => todo!("Support CaptureRef"),
 
             // TODO: Make these use IR registers instead of alloca
             Node::LocalSet(local_ref, value_mir) => {
-                let value_ref = self.compile_mir(func, func_ref, builder, local_refs, anon_counter, value_mir);
-                let local_ref = local_refs.table[local_ref.i];
+                let value_ref = self.compile_mir(func, fb, value_mir);
+                let local_ref = fb.local_refs.table[local_ref.i];
 
-                LLVMBuildStore(builder, self.coalesce_value(value_ref), local_ref);
+                LLVMBuildStore(fb.builder, self.coalesce_value(value_ref), local_ref);
 
                 None
             },
             Node::LocalGet(local_ref) => {
-                let local_ref = local_refs.table[local_ref.i];
-                let name = anon_counter.next_anon();
+                let local_ref = fb.local_refs.table[local_ref.i];
+                let name = fb.stmt_name_gen.next("local_get");
 
-                Some(LLVMBuildLoad2(builder, LLVMGetAllocatedType(local_ref), local_ref, name.as_ptr()))
+                Some(LLVMBuildLoad2(fb.builder, LLVMGetAllocatedType(local_ref), local_ref, name.as_ptr()))
             },
 
             Node::Block(mirs) => {
                 let mut result = None;
 
                 for mir in mirs {
-                    result = self.compile_mir(func, func_ref, builder, local_refs, anon_counter, mir);
+                    result = self.compile_mir(func, fb, mir);
                 }
 
                 result
@@ -236,20 +225,20 @@ impl <'a> LLVMJITCompiler<'a> {
             Node::Call(name, target_mir, arg_mirs) => {
                 let mut args = Vec::with_capacity(arg_mirs.len() + 1);
 
-                let target_ref = self.compile_mir(func, func_ref, builder, local_refs, anon_counter, target_mir);
+                let target_ref = self.compile_mir(func, fb, target_mir);
                 args.push(self.coalesce_value(target_ref));
 
                 for arg_mir in arg_mirs {
-                    let value_ref = self.compile_mir(func, func_ref, builder, local_refs, anon_counter, arg_mir);
+                    let value_ref = self.compile_mir(func, fb, arg_mir);
 
                     args.push(self.coalesce_value(value_ref));
                 }
 
-                let name_ref_name = anon_counter.next_str("str");
+                let name_ref_name = self.str_const_name_gen.next("str");
                 let c_name = CString::new(name.as_bytes()).unwrap();
                 // let name_global_ref = LLVMAddGlobal(self.module, LLVMPointerTypeInContext(self.context, 0), name_ref_name.as_ptr());
                 // LLVMSetGlobalConstant(name_global_ref, 1);
-                let name_ref = LLVMBuildGlobalStringPtr(builder, c_name.as_ptr(), name_ref_name.as_ptr());
+                let name_ref = LLVMBuildGlobalStringPtr(fb.builder, c_name.as_ptr(), name_ref_name.as_ptr());
 
                 // let name_ref = LLVMData
 
@@ -258,15 +247,15 @@ impl <'a> LLVMJITCompiler<'a> {
                 let arg_array_type = LLVMArrayType2(self.value_t, args.len() as u64);
 
                 // let args_array_ref = LLVMConstArray2(self.value_t, args.as_mut_ptr(), args.len() as u64);
-                let args_array_ref_name = anon_counter.next_anon();
-                let args_array_ref = LLVMBuildAlloca(builder, arg_array_type, args_array_ref_name.as_ptr());
+                let args_array_ref_name = fb.stmt_name_gen.next("args");
+                let args_array_ref = LLVMBuildAlloca(fb.builder, arg_array_type, args_array_ref_name.as_ptr());
 
                 let arg_count = args.len();
 
                 for (i, arg_ref) in args.into_iter().enumerate() {
-                    let n = anon_counter.next_anon();
+                    let n = fb.stmt_name_gen.next("arg");
                     let ptr_to_args_array_element = LLVMBuildGEP2(
-                        builder,
+                        fb.builder,
                         arg_array_type,
                         args_array_ref,
                         [
@@ -276,12 +265,12 @@ impl <'a> LLVMJITCompiler<'a> {
                         2,
                         n.as_ptr()
                     );
-                    LLVMBuildStore(builder, arg_ref, ptr_to_args_array_element);
+                    LLVMBuildStore(fb.builder, arg_ref, ptr_to_args_array_element);
                 }
 
-                let ptr_to_args_array_name = anon_counter.next_anon();
+                let ptr_to_args_array_name = fb.stmt_name_gen.next("args_ptr");
                 let ptr_to_args_array = LLVMBuildGEP2(
-                    builder,
+                    fb.builder,
                     arg_array_type,
                     args_array_ref,
                     [
@@ -297,12 +286,12 @@ impl <'a> LLVMJITCompiler<'a> {
                     LLVMConstInt(LLVMInt64TypeInContext(self.context), arg_count as u64, 0)
                 ];
 
-                let call_fn = &self.intrinsic_fns["call"];
+                let call_fn = &self.host_fns["call"];
 
                 // TODO: Better names
-                let call_name = anon_counter.next_anon();
+                let call_name = fb.stmt_name_gen.next("result");
                 let call = LLVMBuildCall2(
-                    builder,
+                    fb.builder,
                     call_fn.type_ref,
                     call_fn.func_ref,
                     args_array.as_mut_ptr(),
@@ -364,7 +353,7 @@ impl <'a> LLVMJITCompiler<'a> {
 
         let mut host_symbols = Vec::new();
 
-        for (name, intrinsic_fn) in &self.intrinsic_fns {
+        for (name, intrinsic_fn) in &self.host_fns {
             let c_name = CString::new(name.clone()).unwrap();
 
             let fn_name = LLVMOrcLLJITMangleAndIntern(self.jit, c_name.as_ptr());
