@@ -11,7 +11,7 @@ use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
 use lib::Value;
-use crate::backend::llvm::extern_fn::HostFn;
+use crate::backend::llvm::host_fn::HostFn;
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::backend::llvm::ref_table::RefTable;
 use crate::compiler;
