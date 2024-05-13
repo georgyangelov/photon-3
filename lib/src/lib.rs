@@ -84,6 +84,12 @@ impl Value {
         }
     }
 
+    pub unsafe fn trampoline_fn(self) -> extern "C" fn(*const Value) -> Value {
+        let ptr_to_ptr_to_fn: *const extern "C" fn(*const Value) -> Value = std::mem::transmute(self.val);
+
+        *ptr_to_ptr_to_fn
+    }
+
     pub unsafe fn fn_0(self) -> extern "C" fn() -> Value {
         let ptr_to_ptr_to_fn: *const extern "C" fn() -> Value = std::mem::transmute(self.val);
 

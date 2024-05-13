@@ -48,13 +48,17 @@ pub extern fn call(name: *const i8, args: *const Value, arg_count: u64) -> Value
         } else if name == c"call" && args[0].typ == ValueT::Closure {
             let this = args[0];
 
-            match arg_count - 1 {
-                0 => this.fn_0()(),
-                1 => this.fn_1()(args[1]),
-                2 => this.fn_2()(args[1], args[2]),
-                3 => this.fn_3()(args[1], args[2], args[3]),
-                _ => panic!("Functions with more than 3 parameters are not supported")
-            }
+            // Non-trampoline option
+            // match arg_count - 1 {
+            //     0 => this.fn_0()(),
+            //     1 => this.fn_1()(args[1]),
+            //     2 => this.fn_2()(args[1], args[2]),
+            //     3 => this.fn_3()(args[1], args[2], args[3]),
+            //     _ => panic!("Functions with more than 3 parameters are not supported")
+            // }
+
+            // Trampoline option
+            this.trampoline_fn()(&args[1])
         } else {
             panic!("Unknown function {}", name.to_str().unwrap())
         }

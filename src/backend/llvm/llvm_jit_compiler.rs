@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::ffi::{c_char, c_uint, c_ulonglong, CString};
+use std::fmt::format;
 use std::ptr;
 use llvm_sys::analysis::*;
 use llvm_sys::core::*;
 use llvm_sys::error::LLVMGetErrorMessage;
+use llvm_sys::LLVMType;
 use llvm_sys::orc2::*;
 use llvm_sys::orc2::lljit::*;
 use llvm_sys::prelude::*;
@@ -85,6 +87,7 @@ impl <'a> LLVMJITCompiler<'a> {
 
                 HostFn::new_pair(
                     module,
+                    // TODO: Check why we need to do this - are we referencing the real malloc otherwise? What links it?
                     "mallocc",
                     LLVMFunctionType(
                         LLVMPointerTypeInContext(context, 0 as c_uint),
@@ -144,7 +147,7 @@ impl <'a> LLVMJITCompiler<'a> {
         }
     }
 
-    unsafe fn compile_fn(&mut self, func: &mir::Function, name: &str) -> LLVMValueRef {
+    unsafe fn compile_fn(&mut self, func: &mir::Function, name: &str) -> (LLVMTypeRef, LLVMValueRef) {
         let mut param_types = Vec::new();
         for _ in 0..func.param_count {
             param_types.push(self.value_t);
@@ -186,7 +189,7 @@ impl <'a> LLVMJITCompiler<'a> {
         LLVMBuildRet(builder, result);
         // LLVMBuildRetVoid(builder);
 
-        func_ref
+        (fn_type, func_ref)
     }
 
     unsafe fn compile_mir(
@@ -210,7 +213,7 @@ impl <'a> LLVMJITCompiler<'a> {
             Node::ParamRef(param_ref) => Some(LLVMGetParam(fb.func_ref, param_ref.i as c_uint)),
             Node::CaptureRef(_) => todo!("Support CaptureRef"),
 
-            // TODO: Make these use IR registers instead of alloca
+            // TODO: Make these use IR registers instead of alloca, or make sure the register local optimization pass is run
             Node::LocalSet(local_ref, value_mir) => {
                 let value_ref = self.compile_mir(func, fb, value_mir);
                 let local_ref = fb.local_refs.table[local_ref.i];
@@ -273,7 +276,8 @@ impl <'a> LLVMJITCompiler<'a> {
                 let func_name = self.func_name_gen.next_string("fn");
                 let func = &self.mir_module.functions[mir_func_ref.i];
 
-                let func_ref = self.compile_fn(func, &func_name);
+                let (func_type, func_ref) = self.compile_fn(func, &func_name);
+                let trampoline_func_ref = self.compile_fn_trampoline(func, &func_name, func_type, func_ref);
 
                 let closure_t = self.closure_struct_type(captures.len());
                 let closure_ptr = self.build_malloc(fb, LLVMSizeOf(closure_t));
@@ -281,7 +285,8 @@ impl <'a> LLVMJITCompiler<'a> {
                 let ptr = self.build_gep(fb, closure_t, closure_ptr, &mut [
                     self.const_u64(0)
                 ]);
-                LLVMBuildStore(fb.builder, func_ref, ptr);
+                // LLVMBuildStore(fb.builder, func_ref, ptr);
+                LLVMBuildStore(fb.builder, trampoline_func_ref, ptr);
 
                 for (i, capture) in captures.iter().enumerate() {
                     let captured_value_ref = match capture {
@@ -305,12 +310,59 @@ impl <'a> LLVMJITCompiler<'a> {
         }
     }
 
+    unsafe fn compile_fn_trampoline(&self, func: &mir::Function, fn_name: &str, compiled_fn_type: LLVMTypeRef, compiled_ref: LLVMValueRef) -> LLVMValueRef {
+        let c_name = CString::new(format!("{}_trampoline", fn_name)).unwrap();
+        let mut args = [
+            LLVMPointerTypeInContext(self.context, 0 as c_uint), // args: *const Value
+
+            // TODO: Verify the arg count before calling
+            // LLVMInt64TypeInContext(self.context)                              // arg_count: u64
+        ];
+        let trampoline_t = LLVMFunctionType(self.value_t, args.as_mut_ptr(), args.len() as u32, 0);
+        let trampoline_fn_ref = LLVMAddFunction(self.module, c_name.as_ptr(), trampoline_t);
+
+        let builder = LLVMCreateBuilderInContext(self.context);
+        let block = LLVMAppendBasicBlockInContext(self.context, trampoline_fn_ref, c_str!("entry"));
+
+        LLVMPositionBuilderAtEnd(builder, block);
+
+        let array_args_ref = LLVMGetParam(trampoline_fn_ref, 0);
+
+        let mut args = Vec::with_capacity(func.param_count);
+        for i in 0..func.param_count {
+            let name = CString::new(format!("arg_ptr.{}", i)).unwrap();
+            let ptr = LLVMBuildGEP2(builder, self.value_t, array_args_ref, [
+                self.const_u64(i as u64)
+            ].as_mut_ptr(), 1, name.as_ptr());
+
+            let name = CString::new(format!("arg.{}", i)).unwrap();
+
+            args.push(LLVMBuildLoad2(builder, self.value_t, ptr, name.as_ptr()));
+        }
+
+        let result = LLVMBuildCall2(
+            builder,
+            compiled_fn_type,
+            compiled_ref,
+            args.as_mut_ptr(),
+            args.len() as u32,
+            c_str!("result")
+        );
+
+        LLVMBuildRet(builder, result);
+
+        LLVMDisposeBuilder(builder);
+
+        trampoline_fn_ref
+    }
+
     unsafe fn build_ptr_value(&self, fb: &mut FunctionBuilder, typ: ValueT, ptr_value_ref: LLVMValueRef) -> LLVMValueRef {
         let name = fb.stmt_name_gen.next("value");
         let value_ref = LLVMBuildAlloca(fb.builder, self.value_t, name.as_ptr());
 
         let ptr = self.build_gep(fb, self.value_t, value_ref, &mut [self.const_i32(0), self.const_i32(0)]);
         LLVMBuildStore(fb.builder, self.const_i32(std::mem::transmute(typ)), ptr);
+        // LLVMBuildStore(fb.builder, self.const_i32(std::mem::transmute(typ)), value_ref);
 
         let ptr = self.build_gep(fb, self.value_t, value_ref, &mut [self.const_i32(0), self.const_i32(1)]);
 

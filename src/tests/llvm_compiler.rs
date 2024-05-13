@@ -39,6 +39,8 @@ fn test_fns() {
     "), Value::int(42));
 }
 
+// TODO: Support closure values
+
 fn run(code: &str) -> Value {
     let ast = parse(code).expect("Could not parse");
     let module = ModuleCompiler::compile_module(ast).expect("Could not compile");
