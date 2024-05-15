@@ -33,9 +33,9 @@
 
 use std::alloc::Layout;
 use std::ffi::{CStr};
-use lib::{Value, ValueT};
+use lib::{Any, AnyT};
 
-pub extern fn call(name: *const i8, args: *const Value, arg_count: u64) -> Value {
+pub extern fn call(name: *const i8, args: *const Any, arg_count: u64) -> Any {
     unsafe {
         let name = CStr::from_ptr(name);
         let args = std::slice::from_raw_parts(args, arg_count as usize);
@@ -44,8 +44,8 @@ pub extern fn call(name: *const i8, args: *const Value, arg_count: u64) -> Value
         println!("args: {:?}", args);
 
         if name == c"+" {
-            Value::int(args[0].assert_int() + args[1].assert_int())
-        } else if name == c"call" && args[0].typ == ValueT::Closure {
+            Any::int(args[0].assert_int() + args[1].assert_int())
+        } else if name == c"call" && args[0].typ == AnyT::Closure {
             let this = args[0];
 
             // Non-trampoline option

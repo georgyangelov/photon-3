@@ -1,13 +1,13 @@
 use std::io;
 use std::io::Write;
-use lib::Value;
+use lib::Any;
 use crate::backend::llvm::LLVMJITCompiler;
 use crate::compiler::ModuleCompiler;
 use crate::frontend::{AST, Lexer, ParseError, Parser};
 
 #[test]
 fn test_literals() {
-    assert_eq!(run("42"), Value::int(42))
+    assert_eq!(run("42"), Any::int(42))
 }
 
 #[test]
@@ -17,7 +17,7 @@ fn test_locals() {
         val b = 11
 
         a
-    "), Value::int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn test_add() {
         val b = 1
 
         a + b
-    "), Value::int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -36,12 +36,12 @@ fn test_fns() {
         val add = (a, b) a + b
 
         add(1, 41)
-    "), Value::int(42));
+    "), Any::int(42));
 }
 
 // TODO: Support closure values
 
-fn run(code: &str) -> Value {
+fn run(code: &str) -> Any {
     let ast = parse(code).expect("Could not parse");
     let module = ModuleCompiler::compile_module(ast).expect("Could not compile");
 
