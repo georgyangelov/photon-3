@@ -60,7 +60,7 @@ impl <'a> LLVMJITCompiler<'a> {
             let context = LLVMOrcThreadSafeContextGetContext(thread_safe_context);
             let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
 
-            let value_t = LLVMStructCreateNamed(context, c_str!("Value"));
+            let value_t = LLVMStructCreateNamed(context, c_str!("Any"));
             LLVMStructSetBody(value_t, [
                 LLVMInt32TypeInContext(context),
                 LLVMInt64TypeInContext(context)
@@ -180,7 +180,7 @@ impl <'a> LLVMJITCompiler<'a> {
 
         let result = self.compile_mir(func, &mut function_builder, &func.body);
         let result = match result {
-            None => self.make_const_value(Any::none()),
+            None => self.make_const_any(Any::none()),
             Some(result) => result
         };
 
@@ -197,16 +197,16 @@ impl <'a> LLVMJITCompiler<'a> {
         mir: &mir::MIR
     ) -> Option<LLVMValueRef> {
         match &mir.node {
-            Node::Nop => Some(self.make_const_value(Any::none())),
+            Node::Nop => Some(self.make_const_any(Any::none())),
 
             Node::CompileTimeRef(_) => todo!("Support CompileTimeRef"),
             Node::CompileTimeSet(_, _) => todo!("Support CompileTimeSet"),
             Node::GlobalRef(_) => todo!("Support GlobalRef"),
             Node::ConstStringRef(_) => todo!("Support ConstStringRef"),
 
-            Node::LiteralBool(value) => Some(self.make_const_value(Any::bool(*value))),
-            Node::LiteralI64(value) => Some(self.make_const_value(Any::int(*value))),
-            Node::LiteralF64(value) => Some(self.make_const_value(Any::float(*value))),
+            Node::LiteralBool(value) => Some(self.make_const_any(Any::bool(*value))),
+            Node::LiteralI64(value) => Some(self.make_const_any(Any::int(*value))),
+            Node::LiteralF64(value) => Some(self.make_const_any(Any::float(*value))),
 
             Node::ParamRef(param_ref) => Some(LLVMGetParam(fb.func_ref, param_ref.i as c_uint)),
             Node::CaptureRef(_) => todo!("Support CaptureRef"),
@@ -216,7 +216,7 @@ impl <'a> LLVMJITCompiler<'a> {
                 let value_ref = self.compile_mir(func, fb, value_mir);
                 let local_ref = fb.local_refs.table[local_ref.i];
 
-                LLVMBuildStore(fb.builder, self.coalesce_value(value_ref), local_ref);
+                LLVMBuildStore(fb.builder, self.coalesce_any(value_ref), local_ref);
 
                 None
             },
@@ -238,12 +238,12 @@ impl <'a> LLVMJITCompiler<'a> {
                 let mut args = Vec::with_capacity(arg_mirs.len() + 1);
 
                 let target_ref = self.compile_mir(func, fb, target_mir);
-                args.push(self.coalesce_value(target_ref));
+                args.push(self.coalesce_any(target_ref));
 
                 for arg_mir in arg_mirs {
                     let value_ref = self.compile_mir(func, fb, arg_mir);
 
-                    args.push(self.coalesce_value(value_ref));
+                    args.push(self.coalesce_any(value_ref));
                 }
 
                 let (args_array_ref, arg_count) = self.build_args_array(fb, args);
@@ -447,7 +447,7 @@ impl <'a> LLVMJITCompiler<'a> {
         LLVMBuildGlobalStringPtr(builder, c_name.as_ptr(), name_ref_name.as_ptr())
     }
 
-    unsafe fn make_const_value(&self, value: Any) -> LLVMValueRef {
+    unsafe fn make_const_any(&self, value: Any) -> LLVMValueRef {
         let (t, v) = value.into_raw();
 
         LLVMConstNamedStruct(self.any_t, [
@@ -456,9 +456,9 @@ impl <'a> LLVMJITCompiler<'a> {
         ].as_mut_ptr(), 2)
     }
 
-    unsafe fn coalesce_value(&self, value_ref: Option<LLVMValueRef>) -> LLVMValueRef {
+    unsafe fn coalesce_any(&self, value_ref: Option<LLVMValueRef>) -> LLVMValueRef {
         match value_ref {
-            None => self.make_const_value(Any::none()),
+            None => self.make_const_any(Any::none()),
             Some(value_ref) => value_ref
         }
     }
