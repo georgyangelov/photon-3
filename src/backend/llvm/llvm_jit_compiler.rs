@@ -398,20 +398,16 @@ impl <'a> LLVMJITCompiler<'a> {
     }
 
     unsafe fn build_ptr_any(&self, fb: &mut FunctionBuilder, typ: AnyT, ptr_value_ref: LLVMValueRef) -> LLVMValueRef {
-        let name = fb.stmt_name_gen.next("value");
-        let value_ref = LLVMBuildAlloca(fb.builder, self.any_t, name.as_ptr());
-
-        let ptr = self.build_gep(fb, self.any_t, value_ref, &mut [self.const_i32(0), self.const_i32(0)]);
-        LLVMBuildStore(fb.builder, self.const_i32(std::mem::transmute(typ)), ptr);
-
-        let ptr = self.build_gep(fb, self.any_t, value_ref, &mut [self.const_i32(0), self.const_i32(1)]);
-
         let name = fb.stmt_name_gen.next("ptr_to_int");
         let ptr_value_int_ref = LLVMBuildPtrToInt(fb.builder, ptr_value_ref, LLVMInt64TypeInContext(self.context), name.as_ptr());
-        LLVMBuildStore(fb.builder, ptr_value_int_ref, ptr);
 
-        let name = fb.stmt_name_gen.next("value_load");
-        LLVMBuildLoad2(fb.builder, self.any_t, value_ref, name.as_ptr())
+        let value_ref = LLVMConstNamedStruct(self.any_t, [
+            self.const_i32(typ.into_raw()),
+            LLVMGetPoison(LLVMInt64TypeInContext(self.context))
+        ].as_mut_ptr(), 2);
+
+        let name = fb.stmt_name_gen.next("value");
+        LLVMBuildInsertValue(fb.builder, value_ref, ptr_value_int_ref, 1, name.as_ptr())
     }
 
     unsafe fn build_param_ref(&self, fb: &mut FunctionBuilder, param_ref: &ParamRef) -> LLVMValueRef {

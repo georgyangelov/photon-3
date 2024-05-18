@@ -20,6 +20,12 @@ pub enum AnyT {
     FunctionPtr
 }
 
+impl AnyT {
+    pub fn into_raw(self) -> i32 {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
 impl Any {
     pub fn none() -> Self {
         Any { typ: AnyT::None, val: 0 }
