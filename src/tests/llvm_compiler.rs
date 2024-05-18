@@ -39,7 +39,24 @@ fn test_fns() {
     "), Any::int(42));
 }
 
-// TODO: Support closure values
+#[test]
+fn test_local_captures() {
+    assert_eq!(run("
+        val a = 41
+        val add = (b) a + b
+
+        add(1)
+    "), Any::int(42));
+}
+
+#[test]
+fn test_param_captures() {
+    assert_eq!(run("
+        val add = (a) (b) a + b
+
+        add(1)(41)
+    "), Any::int(42));
+}
 
 fn run(code: &str) -> Any {
     let ast = parse(code).expect("Could not parse");

@@ -15,7 +15,7 @@ use crate::backend::llvm::host_fn::HostFn;
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::backend::llvm::ref_table::RefTable;
 use crate::compiler;
-use crate::compiler::lexical_scope::{CaptureFrom, StackFrameLocalRef};
+use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, StackFrameLocalRef};
 use crate::compiler::mir;
 use crate::compiler::mir::Node;
 
@@ -48,6 +48,9 @@ pub struct FunctionBuilder {
 
     func_ref: LLVMValueRef,
     builder: LLVMBuilderRef,
+
+    capture_arg_index: Option<usize>,
+    capture_struct_type: Option<LLVMTypeRef>
 }
 
 impl <'a> LLVMJITCompiler<'a> {
@@ -145,13 +148,18 @@ impl <'a> LLVMJITCompiler<'a> {
         }
     }
 
-    unsafe fn compile_fn(&mut self, func: &mir::Function, name: &str) -> (LLVMTypeRef, LLVMValueRef) {
-        let mut param_types = Vec::new();
+    unsafe fn compile_fn(&mut self, func: &mir::Function, name: &str) -> (LLVMTypeRef, LLVMValueRef, Option<LLVMTypeRef>) {
+        let mut param_types = Vec::with_capacity(func.param_count + 1);
         for _ in 0..func.param_count {
             param_types.push(self.any_t);
         }
 
-        let fn_type = LLVMFunctionType(self.any_t, param_types.as_mut_ptr(), func.param_count as c_uint, 0);
+        let has_capture_struct = func.captures.len() > 0;
+        if has_capture_struct {
+            param_types.push(LLVMPointerTypeInContext(self.context, 0 as c_uint));
+        }
+
+        let fn_type = LLVMFunctionType(self.any_t, param_types.as_mut_ptr(), param_types.len() as c_uint, 0);
         // let fn_type = LLVMFunctionType(LLVMVoidTypeInContext(self.context), param_types.as_mut_ptr(), func.param_count as c_uint, 0);
 
         let fn_name = CString::new(name).unwrap();
@@ -169,6 +177,14 @@ impl <'a> LLVMJITCompiler<'a> {
             local_refs.table.push(LLVMBuildAlloca(builder, self.any_t, local_name.as_ptr()));
         }
 
+        let capture_struct_type = if has_capture_struct {
+            Some(self.closure_struct_type(func.captures.len()))
+        } else { None };
+
+        let capture_arg_index = if has_capture_struct {
+            Some(func.param_count)
+        } else { None };
+
         let mut function_builder = FunctionBuilder {
             local_refs,
             
@@ -176,6 +192,9 @@ impl <'a> LLVMJITCompiler<'a> {
 
             func_ref,
             builder,
+
+            capture_arg_index,
+            capture_struct_type,
         };
 
         let result = self.compile_mir(func, &mut function_builder, &func.body);
@@ -187,7 +206,7 @@ impl <'a> LLVMJITCompiler<'a> {
         LLVMBuildRet(builder, result);
         // LLVMBuildRetVoid(builder);
 
-        (fn_type, func_ref)
+        (fn_type, func_ref, capture_struct_type)
     }
 
     unsafe fn compile_mir(
@@ -209,7 +228,7 @@ impl <'a> LLVMJITCompiler<'a> {
             Node::LiteralF64(value) => Some(self.make_const_any(Any::float(*value))),
 
             Node::ParamRef(param_ref) => Some(LLVMGetParam(fb.func_ref, param_ref.i as c_uint)),
-            Node::CaptureRef(_) => todo!("Support CaptureRef"),
+            Node::CaptureRef(capture_ref) => Some(self.build_load_capture(fb, capture_ref)),
 
             // TODO: Make these use IR registers instead of alloca, or make sure the register local optimization pass is run
             Node::LocalSet(local_ref, value_mir) => {
@@ -274,48 +293,68 @@ impl <'a> LLVMJITCompiler<'a> {
                 let func_name = self.func_name_gen.next_string("fn");
                 let func = &self.mir_module.functions[mir_func_ref.i];
 
-                let (func_type, func_ref) = self.compile_fn(func, &func_name);
-                let trampoline_func_ref = self.compile_fn_trampoline(func, &func_name, func_type, func_ref);
+                let (func_type, func_ref, closure_struct_type) = self.compile_fn(func, &func_name);
+                let trampoline_func_ref = self.compile_fn_trampoline(func, &func_name, func_type, func_ref, closure_struct_type.is_some());
 
-                let closure_t = self.closure_struct_type(captures.len());
-                let closure_ptr = self.build_malloc(fb, LLVMSizeOf(closure_t));
+                match closure_struct_type {
+                    None => {
+                        let result = self.build_ptr_any(fb, AnyT::FunctionPtr, trampoline_func_ref);
 
-                let ptr = self.build_gep(fb, closure_t, closure_ptr, &mut [
-                    self.const_u64(0)
-                ]);
-                // LLVMBuildStore(fb.builder, func_ref, ptr);
-                LLVMBuildStore(fb.builder, trampoline_func_ref, ptr);
+                        Some(result)
+                    },
+                    Some(closure_t) => {
+                        let closure_ptr = self.build_malloc(fb, LLVMSizeOf(closure_struct_type.unwrap()));
 
-                for (i, capture) in captures.iter().enumerate() {
-                    let captured_value_ref = match capture {
-                        CaptureFrom::Capture(_) => todo!("Support capture captures"),
-                        CaptureFrom::Param(_) => todo!("Support param captures"),
-                        CaptureFrom::Local(local_ref) => self.build_load_local(fb, local_ref)
-                    };
+                        let ptr = self.build_gep(fb, closure_struct_type.unwrap(), closure_ptr, &mut [
+                            self.const_u64(0)
+                        ]);
+                        // LLVMBuildStore(fb.builder, func_ref, ptr);
+                        LLVMBuildStore(fb.builder, trampoline_func_ref, ptr);
 
-                    let ptr = self.build_gep(fb, closure_t, closure_ptr, &mut [
-                        self.const_u64((i + 1) as u64),
-                    ]);
-                    LLVMBuildStore(fb.builder, captured_value_ref, ptr);
+                        for (i, capture) in captures.iter().enumerate() {
+                            let captured_value_ref = match capture {
+                                CaptureFrom::Capture(_) => todo!("Support capture captures"),
+                                CaptureFrom::Param(_) => todo!("Support param captures"),
+                                CaptureFrom::Local(local_ref) => self.build_load_local(fb, local_ref)
+                            };
+
+                            let ptr = self.build_gep(fb, closure_t, closure_ptr, &mut [
+                                self.const_i32(0),
+                                self.const_i32((i + 1) as i32),
+                            ]);
+                            LLVMBuildStore(fb.builder, captured_value_ref, ptr);
+                        }
+
+                        let result = self.build_ptr_any(fb, AnyT::Closure, closure_ptr);
+
+                        Some(result)
+                    }
                 }
-
-                let result = self.build_ptr_value(fb, AnyT::Closure, closure_ptr);
-
-                Some(result)
             },
 
             Node::If(_, _, _) => todo!("Support If")
         }
     }
 
-    unsafe fn compile_fn_trampoline(&self, func: &mir::Function, fn_name: &str, compiled_fn_type: LLVMTypeRef, compiled_ref: LLVMValueRef) -> LLVMValueRef {
+    unsafe fn compile_fn_trampoline(
+        &self,
+        func: &mir::Function,
+        fn_name: &str,
+        compiled_fn_type: LLVMTypeRef,
+        compiled_ref: LLVMValueRef,
+        has_capture_struct: bool
+    ) -> LLVMValueRef {
         let c_name = CString::new(format!("{}_trampoline", fn_name)).unwrap();
-        let mut args = [
-            LLVMPointerTypeInContext(self.context, 0 as c_uint), // args: *const Value
+        let mut args = Vec::with_capacity(3);
+        args.push(LLVMPointerTypeInContext(self.context, 0 as c_uint)); // args: *const Value
 
-            // TODO: Verify the arg count before calling
-            // LLVMInt64TypeInContext(self.context)                              // arg_count: u64
-        ];
+        // TODO: Verify the arg count before calling
+        // LLVMInt64TypeInContext(self.context)                              // arg_count: u64
+
+        if has_capture_struct {
+            args.push(LLVMPointerTypeInContext(self.context, 0 as c_uint)); // captures: *const <capture struct>
+        }
+
         let trampoline_t = LLVMFunctionType(self.any_t, args.as_mut_ptr(), args.len() as u32, 0);
         let trampoline_fn_ref = LLVMAddFunction(self.module, c_name.as_ptr(), trampoline_t);
 
@@ -326,7 +365,7 @@ impl <'a> LLVMJITCompiler<'a> {
 
         let array_args_ref = LLVMGetParam(trampoline_fn_ref, 0);
 
-        let mut args = Vec::with_capacity(func.param_count);
+        let mut args = Vec::with_capacity(func.param_count + 1);
         for i in 0..func.param_count {
             let name = CString::new(format!("arg_ptr.{}", i)).unwrap();
             let ptr = LLVMBuildGEP2(builder, self.any_t, array_args_ref, [
@@ -336,6 +375,10 @@ impl <'a> LLVMJITCompiler<'a> {
             let name = CString::new(format!("arg.{}", i)).unwrap();
 
             args.push(LLVMBuildLoad2(builder, self.any_t, ptr, name.as_ptr()));
+        }
+
+        if has_capture_struct {
+            args.push(LLVMGetParam(trampoline_fn_ref, 1));
         }
 
         let result = LLVMBuildCall2(
@@ -354,13 +397,12 @@ impl <'a> LLVMJITCompiler<'a> {
         trampoline_fn_ref
     }
 
-    unsafe fn build_ptr_value(&self, fb: &mut FunctionBuilder, typ: AnyT, ptr_value_ref: LLVMValueRef) -> LLVMValueRef {
+    unsafe fn build_ptr_any(&self, fb: &mut FunctionBuilder, typ: AnyT, ptr_value_ref: LLVMValueRef) -> LLVMValueRef {
         let name = fb.stmt_name_gen.next("value");
         let value_ref = LLVMBuildAlloca(fb.builder, self.any_t, name.as_ptr());
 
         let ptr = self.build_gep(fb, self.any_t, value_ref, &mut [self.const_i32(0), self.const_i32(0)]);
         LLVMBuildStore(fb.builder, self.const_i32(std::mem::transmute(typ)), ptr);
-        // LLVMBuildStore(fb.builder, self.const_i32(std::mem::transmute(typ)), value_ref);
 
         let ptr = self.build_gep(fb, self.any_t, value_ref, &mut [self.const_i32(0), self.const_i32(1)]);
 
@@ -377,6 +419,23 @@ impl <'a> LLVMJITCompiler<'a> {
         let name = fb.stmt_name_gen.next("local_get");
 
         LLVMBuildLoad2(fb.builder, LLVMGetAllocatedType(local_ref), local_ref, name.as_ptr())
+    }
+
+    unsafe fn build_load_capture(
+        &self,
+        fb: &mut FunctionBuilder,
+        capture_ref: &CaptureRef
+    ) -> LLVMValueRef {
+        let mut indices = [self.const_i32(0), self.const_i32(capture_ref.i as i32 + 1)];
+        let ptr = self.build_gep(
+            fb,
+            fb.capture_struct_type.expect("Requires capture struct type"),
+            LLVMGetParam(fb.func_ref, fb.capture_arg_index.expect("Requires capture_arg_index") as c_uint),
+            &mut indices // The +1 is because the first element of the struct is the function pointer
+        );
+
+        let name = fb.stmt_name_gen.next("capture_get");
+        LLVMBuildLoad2(fb.builder, self.any_t, ptr, name.as_ptr())
     }
 
     unsafe fn build_gep(&self, fb: &mut FunctionBuilder, type_ref: LLVMTypeRef, ptr_ref: LLVMValueRef, indices: &mut [LLVMValueRef]) -> LLVMValueRef {

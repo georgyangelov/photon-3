@@ -58,7 +58,14 @@ pub extern fn call(name: *const i8, args: *const Any, arg_count: u64) -> Any {
             // }
 
             // Trampoline option
-            this.trampoline_fn()(&args[1])
+            let (func, closure_struct) = this.trampoline_closure();
+
+            func(&args[1], closure_struct) // .byte_add(size_of::<usize>())
+        } else if name == c"call" && args[0].typ == AnyT::FunctionPtr {
+            let this = args[0];
+            let func = this.trampoline_fn();
+
+            func(&args[1])
         } else {
             panic!("Unknown function {}", name.to_str().unwrap())
         }

@@ -16,7 +16,8 @@ pub enum AnyT {
     Float,
 
     // TODO: Optimization idea - another variant with no captures that points directly to the function
-    Closure
+    Closure,
+    FunctionPtr
 }
 
 impl Any {
@@ -79,38 +80,45 @@ impl Any {
 
     pub fn assert_closure(self) -> *mut u8 {
         match self {
-            Any { typ: AnyT::Float, val } => unsafe { std::mem::transmute(val) },
-            _ => panic!("Invalid value: expected {:?}, got {:?}", AnyT::Float, self.typ)
+            Any { typ: AnyT::Closure, val } => unsafe { std::mem::transmute(val) },
+            _ => panic!("Invalid value: expected {:?}, got {:?}", AnyT::Closure, self.typ)
         }
     }
 
     pub unsafe fn trampoline_fn(self) -> extern "C" fn(*const Any) -> Any {
-        let ptr_to_ptr_to_fn: *const extern "C" fn(*const Any) -> Any = std::mem::transmute(self.val);
+        let ptr_to_ptr_to_fn: extern "C" fn(*const Any) -> Any = std::mem::transmute(self.val);
 
-        *ptr_to_ptr_to_fn
+        ptr_to_ptr_to_fn
     }
 
-    pub unsafe fn fn_0(self) -> extern "C" fn() -> Any {
-        let ptr_to_ptr_to_fn: *const extern "C" fn() -> Any = std::mem::transmute(self.val);
+    pub unsafe fn trampoline_closure(self) -> (extern "C" fn(*const Any, *const u8) -> Any, *const u8) {
+        let val = self.val;
+        let ptr_to_ptr_to_fn: *const extern "C" fn(*const Any, *const u8) -> Any = std::mem::transmute(val);
 
-        *ptr_to_ptr_to_fn
+        (*ptr_to_ptr_to_fn, std::mem::transmute(val))
     }
 
-    pub unsafe fn fn_1(self) -> extern "C" fn(Any) -> Any {
-        let ptr_to_ptr_to_fn: *const extern "C" fn(Any) -> Any = std::mem::transmute(self.val);
-
-        *ptr_to_ptr_to_fn
-    }
-
-    pub unsafe fn fn_2(self) -> extern "C" fn(Any, Any) -> Any {
-        let ptr_to_ptr_to_fn: *const extern "C" fn(Any, Any) -> Any = std::mem::transmute(self.val);
-
-        *ptr_to_ptr_to_fn
-    }
-
-    pub unsafe fn fn_3(self) -> extern "C" fn(Any, Any, Any) -> Any {
-        let ptr_to_ptr_to_fn: *const extern "C" fn(Any, Any, Any) -> Any = std::mem::transmute(self.val);
-
-        *ptr_to_ptr_to_fn
-    }
+    // pub unsafe fn fn_0(self) -> extern "C" fn() -> Any {
+    //     let ptr_to_ptr_to_fn: *const extern "C" fn() -> Any = std::mem::transmute(self.val);
+    //
+    //     *ptr_to_ptr_to_fn
+    // }
+    //
+    // pub unsafe fn fn_1(self) -> extern "C" fn(Any) -> Any {
+    //     let ptr_to_ptr_to_fn: *const extern "C" fn(Any) -> Any = std::mem::transmute(self.val);
+    //
+    //     *ptr_to_ptr_to_fn
+    // }
+    //
+    // pub unsafe fn fn_2(self) -> extern "C" fn(Any, Any) -> Any {
+    //     let ptr_to_ptr_to_fn: *const extern "C" fn(Any, Any) -> Any = std::mem::transmute(self.val);
+    //
+    //     *ptr_to_ptr_to_fn
+    // }
+    //
+    // pub unsafe fn fn_3(self) -> extern "C" fn(Any, Any, Any) -> Any {
+    //     let ptr_to_ptr_to_fn: *const extern "C" fn(Any, Any, Any) -> Any = std::mem::transmute(self.val);
+    //
+    //     *ptr_to_ptr_to_fn
+    // }
 }
