@@ -63,8 +63,8 @@ impl <'a> LLVMJITCompiler<'a> {
             let context = LLVMOrcThreadSafeContextGetContext(thread_safe_context);
             let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
 
-            let value_t = LLVMStructCreateNamed(context, c_str!("Any"));
-            LLVMStructSetBody(value_t, [
+            let any_t = LLVMStructCreateNamed(context, c_str!("Any"));
+            LLVMStructSetBody(any_t, [
                 LLVMInt32TypeInContext(context),
                 LLVMInt64TypeInContext(context)
             ].as_mut_ptr(), 2, 0);
@@ -74,7 +74,7 @@ impl <'a> LLVMJITCompiler<'a> {
                     module,
                     "call",
                     LLVMFunctionType(
-                        value_t,
+                        any_t,
                         [
                             LLVMPointerTypeInContext(context, 0 as c_uint), // name: *const u8
                             LLVMPointerTypeInContext(context, 0 as c_uint), // args: *const Value
@@ -115,7 +115,7 @@ impl <'a> LLVMJITCompiler<'a> {
                 module,
                 jit,
 
-                any_t: value_t,
+                any_t,
 
                 host_fns,
                 str_const_name_gen: SymbolNameCounter::new(),
