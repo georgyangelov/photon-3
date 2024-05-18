@@ -58,6 +58,18 @@ fn test_param_captures() {
     "), Any::int(42));
 }
 
+#[test]
+fn test_capture_captures() {
+    assert_eq!(run("
+        val a = 41
+        val add = () {
+            (b) a + b
+        }
+
+        add()(1)
+    "), Any::int(42));
+}
+
 fn run(code: &str) -> Any {
     let ast = parse(code).expect("Could not parse");
     let module = ModuleCompiler::compile_module(ast).expect("Could not compile");

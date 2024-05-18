@@ -15,7 +15,7 @@ use crate::backend::llvm::host_fn::HostFn;
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::backend::llvm::ref_table::RefTable;
 use crate::compiler;
-use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, StackFrameLocalRef};
+use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
 use crate::compiler::mir;
 use crate::compiler::mir::Node;
 
@@ -227,7 +227,7 @@ impl <'a> LLVMJITCompiler<'a> {
             Node::LiteralI64(value) => Some(self.make_const_any(Any::int(*value))),
             Node::LiteralF64(value) => Some(self.make_const_any(Any::float(*value))),
 
-            Node::ParamRef(param_ref) => Some(LLVMGetParam(fb.func_ref, param_ref.i as c_uint)),
+            Node::ParamRef(param_ref) => Some(self.build_param_ref(fb, param_ref)),
             Node::CaptureRef(capture_ref) => Some(self.build_load_capture(fb, capture_ref)),
 
             // TODO: Make these use IR registers instead of alloca, or make sure the register local optimization pass is run
@@ -313,8 +313,8 @@ impl <'a> LLVMJITCompiler<'a> {
 
                         for (i, capture) in captures.iter().enumerate() {
                             let captured_value_ref = match capture {
-                                CaptureFrom::Capture(_) => todo!("Support capture captures"),
-                                CaptureFrom::Param(_) => todo!("Support param captures"),
+                                CaptureFrom::Capture(capture_ref) => self.build_load_capture(fb, capture_ref),
+                                CaptureFrom::Param(param_ref) => self.build_param_ref(fb, param_ref),
                                 CaptureFrom::Local(local_ref) => self.build_load_local(fb, local_ref)
                             };
 
@@ -414,6 +414,10 @@ impl <'a> LLVMJITCompiler<'a> {
         LLVMBuildLoad2(fb.builder, self.any_t, value_ref, name.as_ptr())
     }
 
+    unsafe fn build_param_ref(&self, fb: &mut FunctionBuilder, param_ref: &ParamRef) -> LLVMValueRef {
+        LLVMGetParam(fb.func_ref, param_ref.i as c_uint)
+    }
+
     unsafe fn build_load_local(&self, fb: &mut FunctionBuilder, local_ref: &StackFrameLocalRef) -> LLVMValueRef {
         let local_ref = fb.local_refs.table[local_ref.i];
         let name = fb.stmt_name_gen.next("local_get");
@@ -444,6 +448,7 @@ impl <'a> LLVMJITCompiler<'a> {
         LLVMBuildGEP2(fb.builder, type_ref, ptr_ref, indices.as_mut_ptr(), indices.len() as u32, name.as_ptr())
     }
 
+    // TODO: This leaks memory
     unsafe fn build_malloc(&self, fb: &mut FunctionBuilder, size: LLVMValueRef) -> LLVMValueRef {
         let malloc = &self.host_fns["mallocc"];
         let name = fb.stmt_name_gen.next("malloc");
