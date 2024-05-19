@@ -138,7 +138,7 @@ impl <'a> FunctionCompiler<'a> {
             // TODO: Make these use IR registers instead of alloca, or make sure the register local optimization pass is run
             Node::LocalSet(local_ref, value_mir) => {
                 let value_ref = self.compile_mir(value_mir);
-                let value_ref = self.coalesce_any(value_ref);
+                let value_ref = self.coalesce_none(value_ref);
 
                 self.build_local_store(local_ref, value_ref);
 
@@ -160,11 +160,11 @@ impl <'a> FunctionCompiler<'a> {
                 let mut args = Vec::with_capacity(arg_mirs.len() + 1);
 
                 let target_ref = self.compile_mir(target_mir);
-                args.push(self.coalesce_any(target_ref));
+                args.push(self.coalesce_none(target_ref));
 
                 for arg_mir in arg_mirs {
                     let value_ref = self.compile_mir(arg_mir);
-                    args.push(self.coalesce_any(value_ref));
+                    args.push(self.coalesce_none(value_ref));
                 }
 
                 let (args_array_ref, arg_count) = self.build_args_array(args);
@@ -423,8 +423,7 @@ impl <'a> FunctionCompiler<'a> {
         LLVMBuildCall2(self.builder, malloc.type_ref, malloc.func_ref, [size].as_mut_ptr(), 1, name.as_ptr())
     }
 
-    // TODO: Rename to something more meaningful
-    unsafe fn coalesce_any(&mut self, value_ref: Option<LLVMValueRef>) -> LLVMValueRef {
+    unsafe fn coalesce_none(&mut self, value_ref: Option<LLVMValueRef>) -> LLVMValueRef {
         match value_ref {
             None => self.build_const_any(Any::none()),
             Some(value_ref) => value_ref
