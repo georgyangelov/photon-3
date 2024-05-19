@@ -161,7 +161,7 @@ impl <'a> FunctionCompiler<'a> {
                     args.push(self.coalesce_none(value_ref));
                 }
 
-                let (args_array_ref, arg_count) = self.build_args_array(args);
+                let (args_array_ref, arg_count) = self.build_args_array_alloca_store(args);
 
                 // Call the "call" host fn with the arguments as an array:
                 // `1 + 2` => `call('+', [1, 2], 2)`
@@ -361,7 +361,7 @@ impl <'a> FunctionCompiler<'a> {
         LLVMBuildGlobalStringPtr(self.builder, c_name.as_ptr(), name_ref_name.as_ptr())
     }
 
-    unsafe fn build_args_array(&mut self, args: Vec<LLVMValueRef>) -> (LLVMValueRef, u64) {
+    unsafe fn build_args_array_alloca_store(&mut self, args: Vec<LLVMValueRef>) -> (LLVMValueRef, u64) {
         let arg_array_type = LLVMArrayType2(self.c.any_t, args.len() as u64);
 
         let args_array_ref_name = self.stmt_name_gen.next("args_array");
@@ -387,6 +387,25 @@ impl <'a> FunctionCompiler<'a> {
 
         (args_array_ref, arg_count as u64)
     }
+
+    // unsafe fn build_args_array_insertvalue(&mut self, args: Vec<LLVMValueRef>) -> (LLVMValueRef, u64) {
+    //     let mut poison_array_vals = Vec::with_capacity(args.len());
+    //     for _ in 0..args.len() {
+    //         poison_array_vals.push(LLVMGetPoison(self.c.any_t));
+    //     }
+    //
+    //     let array_ref = LLVMConstArray2(self.c.any_t, poison_array_vals.as_mut_ptr(), poison_array_vals.len() as u64);
+    //     let mut result = array_ref;
+    //
+    //     let arg_count = args.len();
+    //
+    //     for (i, arg) in args.into_iter().enumerate() {
+    //         let name = self.stmt_name_gen.next("args_array");
+    //         result = LLVMBuildInsertValue(self.builder, array_ref, arg, i as c_uint, name.as_ptr());
+    //     }
+    //
+    //     (array_ref, arg_count as u64)
+    // }
 
     unsafe fn build_call(
         &mut self,
