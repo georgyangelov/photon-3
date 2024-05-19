@@ -10,7 +10,7 @@ use llvm_sys::prelude::*;
 use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
-use lib::{Any};
+use lib::{Any, AnyT};
 use crate::backend::llvm::host_fn::HostFn;
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::compiler;
@@ -31,7 +31,7 @@ pub struct LLVMJITCompiler<'a> {
     jit: LLVMOrcLLJITRef,
 
     mir_module: &'a compiler::Module,
-    runtime_main_fn: &'a mir::Function
+    main_fn: &'a mir::Function
 }
 
 pub struct CompilerModuleContext {
@@ -40,14 +40,24 @@ pub struct CompilerModuleContext {
 
     pub any_t: LLVMTypeRef,
 
+    pub compile_time_slots: Vec<LLVMValueRef>,
     pub host_fns: HashMap<String, HostFn>,
 
     pub str_const_name_gen: SymbolNameCounter,
     pub func_name_gen: SymbolNameCounter
 }
 
+// TODO: Make sure this gets disposed at some point
+// impl Drop for LLVMJITCompiler {
+//     fn drop(&mut self) {
+//         unsafe {
+//             LLVMOrcDisposeThreadSafeContext(self.thread_safe_context);
+//         }
+//     }
+// }
+
 impl <'a> LLVMJITCompiler<'a> {
-    pub fn new(mir_module: &'a compiler::Module) -> Self {
+    pub fn new(mir_module: &'a compiler::Module, compile_time: bool) -> Self {
         unsafe {
             LLVM_InitializeNativeTarget();
             LLVM_InitializeNativeAsmPrinter();
@@ -61,6 +71,18 @@ impl <'a> LLVMJITCompiler<'a> {
                 LLVMInt32TypeInContext(llvm_context),
                 LLVMInt64TypeInContext(llvm_context)
             ].as_mut_ptr(), 2, 0);
+
+            let mut compile_time_slots = Vec::with_capacity(mir_module.comptime_export_count);
+            for i in 0..mir_module.comptime_export_count {
+                let name = CString::new(Self::global_symbol_name(i)).unwrap();
+                let global_ref = LLVMAddGlobal(module, any_t, name.as_ptr());
+
+                if compile_time {
+                    LLVMSetInitializer(global_ref, LLVMGetUndef(any_t));
+                }
+
+                compile_time_slots.push(global_ref);
+            }
 
             let host_fns = HashMap::from([
                 HostFn::new_pair(
@@ -100,12 +122,13 @@ impl <'a> LLVMJITCompiler<'a> {
                 panic!("Could not create JIT: {}", CString::from_raw(error_message).into_string().unwrap());
             }
 
-            let runtime_main_fn = &mir_module.runtime_main;
+            let main_fn = if compile_time { &mir_module.comptime_main } else { &mir_module.runtime_main };
 
             let context = CompilerModuleContext {
                 context: llvm_context,
                 module,
                 any_t,
+                compile_time_slots,
                 host_fns,
                 str_const_name_gen: SymbolNameCounter::new(),
                 func_name_gen: SymbolNameCounter::new(),
@@ -116,18 +139,18 @@ impl <'a> LLVMJITCompiler<'a> {
                 context,
                 jit,
                 mir_module,
-                runtime_main_fn
+                main_fn
             }
         }
     }
 
-    pub fn compile(&'a mut self) -> extern "C" fn() -> Any {
+    pub fn compile(&mut self) -> unsafe extern "C" fn() -> Any {
         unsafe {
             // self.compile_fn(&self.mir_module.runtime_main, "main");
             FunctionCompiler::compile(
                 &mut self.context,
                 self.mir_module,
-                self.runtime_main_fn,
+                self.main_fn,
                 "main",
                 false,
                 false
@@ -149,7 +172,58 @@ impl <'a> LLVMJITCompiler<'a> {
             self.optimize_module();
             self.print_module();
 
-            std::mem::transmute(self.jit_find_fn_address(self.jit, "main"))
+            std::mem::transmute(self.jit_find_symbol_address("main"))
+        }
+    }
+
+    // pub fn set_comptime_exports_at_runtime(&mut self, values: Vec<Any>) {
+    //     assert_eq!(values.len(), self.mir_module.comptime_export_count);
+    //
+    //     unsafe {
+    //         for i in 0..self.mir_module.comptime_export_count {
+    //             let address = self.jit_find_symbol_address(&Self::global_symbol_name(i));
+    //             let value_ptr: *mut Any = std::mem::transmute(address);
+    //
+    //             *value_ptr = values[i];
+    //         }
+    //     }
+    // }
+
+    pub fn set_comptime_exports(&mut self, values: Vec<&Any>) {
+        assert_eq!(values.len(), self.mir_module.comptime_export_count);
+
+        unsafe {
+            for i in 0..self.mir_module.comptime_export_count {
+                let global_ref = self.context.compile_time_slots[i];
+
+                let value = values[i];
+                match &value.typ {
+                    AnyT::None | AnyT::Bool | AnyT::Int | AnyT::Float => {}
+                    AnyT::Closure | AnyT::FunctionPtr => todo!("This will break function pointers, need to somehow map them")
+                }
+
+                let (t, v) = value.into_raw();
+                let const_any = LLVMConstNamedStruct(self.context.any_t, [
+                    LLVMConstInt(LLVMInt32TypeInContext(self.context.context), t as u64, 0),
+                    LLVMConstInt(LLVMInt64TypeInContext(self.context.context), std::mem::transmute(v), 0),
+                ].as_mut_ptr(), 2);
+
+                LLVMSetInitializer(global_ref, const_any);
+            }
+        }
+    }
+
+    pub fn comptime_exports(&self) -> Vec<&'a Any> {
+        unsafe {
+            let mut comptime_exports = Vec::with_capacity(self.mir_module.comptime_export_count);
+            for i in 0..self.mir_module.comptime_export_count {
+                let address = self.jit_find_symbol_address(&Self::global_symbol_name(i));
+                let value_ptr: *const Any = std::mem::transmute(address);
+
+                comptime_exports.push(&*value_ptr);
+            }
+
+            comptime_exports
         }
     }
 
@@ -227,17 +301,21 @@ impl <'a> LLVMJITCompiler<'a> {
         LLVMRunPasses(self.context.module, c_str!("default<O3>"), target_machine, pass_opts);
     }
 
-    unsafe fn jit_find_fn_address(&self, jit: LLVMOrcLLJITRef, name: &str) -> u64 {
-        let mut fn_address: LLVMOrcExecutorAddress = 0;
+    unsafe fn jit_find_symbol_address(&self, name: &str) -> u64 {
+        let mut symbol_address: LLVMOrcExecutorAddress = 0;
 
         let c_name = CString::new(name).unwrap();
 
-        let error_ref = LLVMOrcLLJITLookup(jit, &mut fn_address, c_name.as_ptr());
+        let error_ref = LLVMOrcLLJITLookup(self.jit, &mut symbol_address, c_name.as_ptr());
         if !error_ref.is_null() {
             let error_message = LLVMGetErrorMessage(error_ref);
-            panic!("Could not look up '{}' function: {}", name, CString::from_raw(error_message).into_string().unwrap());
+            panic!("Could not look up '{}' symbol: {}", name, CString::from_raw(error_message).into_string().unwrap());
         }
 
-        fn_address
+        symbol_address
+    }
+
+    unsafe fn global_symbol_name(i: usize) -> String {
+        format!("comptime_export.{}", i)
     }
 }

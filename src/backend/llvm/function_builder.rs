@@ -123,8 +123,22 @@ impl <'a> FunctionCompiler<'a> {
         match &mir.node {
             Node::Nop => None,
 
-            Node::CompileTimeRef(_) => todo!("Support CompileTimeRef"),
-            Node::CompileTimeSet(_, _) => todo!("Support CompileTimeSet"),
+            Node::CompileTimeSet(export_ref, value_mir) => {
+                let value_ref = self.compile_mir(value_mir);
+                let value_ref = self.coalesce_none(value_ref);
+                let export_slot_ptr = self.c.compile_time_slots[export_ref.i];
+
+                LLVMBuildStore(self.builder, value_ref, export_slot_ptr);
+
+                None
+            },
+            Node::CompileTimeGet(export_ref) => {
+                let export_slot_ptr = self.c.compile_time_slots[export_ref.i];
+                let name = self.stmt_name_gen.next("global_export_load");
+
+                Some(LLVMBuildLoad2(self.builder, self.c.any_t, export_slot_ptr, name.as_ptr()))
+            },
+
             Node::GlobalRef(_) => todo!("Support GlobalRef"),
             Node::ConstStringRef(_) => todo!("Support ConstStringRef"),
 

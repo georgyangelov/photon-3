@@ -12,7 +12,7 @@ pub struct MIR {
 pub enum Node {
     Nop,
 
-    CompileTimeRef(ComptimeExportRef),
+    CompileTimeGet(ComptimeExportRef),
     CompileTimeSet(ComptimeExportRef, Box<MIR>),
 
     GlobalRef(GlobalRef),

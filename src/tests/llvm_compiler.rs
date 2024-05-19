@@ -2,7 +2,8 @@ use std::io;
 use std::io::Write;
 use lib::Any;
 use crate::backend::llvm::LLVMJITCompiler;
-use crate::compiler::ModuleCompiler;
+use crate::compiler;
+use crate::compiler::{mir, ModuleCompiler};
 use crate::frontend::{AST, Lexer, ParseError, Parser};
 
 #[test]
@@ -70,20 +71,48 @@ fn test_capture_captures() {
     "), Any::int(42));
 }
 
+#[test]
+fn test_comptime_vals() {
+    assert_eq!(run("
+        @val a = 41
+
+        a + 1
+    "), Any::int(42))
+}
+
 fn run(code: &str) -> Any {
     let ast = parse(code).expect("Could not parse");
     let module = ModuleCompiler::compile_module(ast).expect("Could not compile");
 
-    let mut jit = LLVMJITCompiler::new(&module);
+    let mut comptime_jit = LLVMJITCompiler::new(&module, true);
+    let mut runtime_jit = LLVMJITCompiler::new(&module, false);
+
+    let (comptime_result, comptime_exports) = run_comptime(&mut comptime_jit);
+    let runtime_result = run_runtime(&mut runtime_jit, comptime_exports);
+
+    runtime_result
+}
+
+fn run_comptime<'a>(jit: &'a mut LLVMJITCompiler) -> (Any, Vec<&'a Any>) {
     let main_fn = jit.compile();
 
-    io::stdout().flush().unwrap();
+    let result = unsafe { main_fn() };
+    let exports = jit.comptime_exports();
 
-    // let mut result = Value::none();
+    println!("Comptime exports: {:?}", exports);
 
-    // unsafe { (*main_fn)(&mut result) };
-    unsafe { main_fn() }
-    // Value::none()
+    (result, exports)
+}
+
+fn run_runtime(jit: &mut LLVMJITCompiler, comptime_exports: Vec<&Any>) -> Any {
+
+    jit.set_comptime_exports(comptime_exports);
+
+    let main_fn = jit.compile();
+
+    let result = unsafe { main_fn() };
+
+    result
 }
 
 fn parse(code: &str) -> Result<AST, ParseError> {

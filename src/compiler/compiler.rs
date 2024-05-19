@@ -292,7 +292,7 @@ impl ModuleCompiler {
                     location: location.clone()
                 });
 
-                mir::Node::CompileTimeRef(export_ref)
+                mir::Node::CompileTimeGet(export_ref)
             }
         };
 
@@ -319,7 +319,7 @@ impl ModuleCompiler {
                     });
                 }
 
-                mir::Node::CompileTimeRef(export_ref)
+                mir::Node::CompileTimeGet(export_ref)
             },
             Ok(AccessNameRef::Global(global_ref)) => mir::Node::GlobalRef(global_ref),
             Ok(AccessNameRef::Capture(capture_ref)) => mir::Node::CaptureRef(capture_ref),

@@ -61,7 +61,7 @@ impl Interpreter {
         match &mir.node {
             Node::Nop => Value::None,
 
-            Node::CompileTimeRef(export_ref) => exports[export_ref.i].clone(),
+            Node::CompileTimeGet(export_ref) => exports[export_ref.i].clone(),
             Node::CompileTimeSet(export_ref, mir) => {
                 let value = self.eval_mir(module, exports, func, mir);
 
