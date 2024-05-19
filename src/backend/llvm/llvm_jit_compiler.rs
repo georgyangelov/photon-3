@@ -194,6 +194,8 @@ impl <'a> LLVMJITCompiler<'a> {
 
             self.optimize_module();
             self.print_module();
+            println!();
+            println!();
 
             std::mem::transmute(self.jit_find_symbol_address("main"))
         }

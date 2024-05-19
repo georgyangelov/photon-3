@@ -80,6 +80,22 @@ fn test_comptime_vals() {
     "), Any::int(42))
 }
 
+#[test]
+fn test_comptime_exprs() {
+    assert_eq!(run("
+        1 + @(1 + 40)
+    "), Any::int(42))
+}
+
+#[test]
+fn test_using_comptime_vals_in_comptime_exprs() {
+    assert_eq!(run("
+        @val a = 40
+
+        1 + @(1 + a)
+    "), Any::int(42))
+}
+
 fn run(code: &str) -> Any {
     let ast = parse(code).expect("Could not parse");
     let module = ModuleCompiler::compile_module(ast).expect("Could not compile");
