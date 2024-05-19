@@ -3,7 +3,6 @@ use llvm_sys::core::*;
 use llvm_sys::prelude::*;
 use lib::{Any, AnyT};
 use crate::backend::llvm::{c_str, CompilerModuleContext};
-use crate::backend::llvm::ref_table::RefTable;
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::compiler;
 use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
@@ -11,7 +10,7 @@ use crate::compiler::mir;
 use crate::compiler::mir::Node;
 
 pub struct FunctionCompiler<'a> {
-    local_refs: RefTable,
+    local_refs: Vec<Option<LLVMValueRef>>,
 
     stmt_name_gen: SymbolNameCounter,
 
@@ -62,12 +61,8 @@ impl <'a> FunctionCompiler<'a> {
 
         LLVMPositionBuilderAtEnd(builder, entry_block);
 
-        let mut local_refs = RefTable::new(func.local_count);
-        for i in 0..func.local_count {
-            let local_name = CString::new(format!("local.{}", i)).unwrap();
-
-            local_refs.table.push(LLVMBuildAlloca(builder, c.any_t, local_name.as_ptr()));
-        }
+        let mut local_refs = Vec::with_capacity(func.local_count);
+        local_refs.resize(func.local_count, None);
 
         let closure_t = if has_captures {
             Some(Self::closure_struct_type(c, func.captures.len()))
@@ -135,7 +130,6 @@ impl <'a> FunctionCompiler<'a> {
             Node::ParamRef(param_ref) => Some(self.build_param_load(param_ref)),
             Node::CaptureRef(capture_ref) => Some(self.build_capture_load(capture_ref)),
 
-            // TODO: Make these use IR registers instead of alloca, or make sure the register local optimization pass is run
             Node::LocalSet(local_ref, value_mir) => {
                 let value_ref = self.compile_mir(value_mir);
                 let value_ref = self.coalesce_none(value_ref);
@@ -335,14 +329,11 @@ impl <'a> FunctionCompiler<'a> {
     }
 
     unsafe fn build_local_store(&mut self, local_ref: &StackFrameLocalRef, value_ref: LLVMValueRef) {
-        LLVMBuildStore(self.builder, value_ref, self.local_refs.table[local_ref.i]);
+        self.local_refs[local_ref.i] = Some(value_ref);
     }
 
     unsafe fn build_local_load(&mut self, local_ref: &StackFrameLocalRef) -> LLVMValueRef {
-        let local_ref = self.local_refs.table[local_ref.i];
-        let name = self.stmt_name_gen.next("local_get");
-
-        LLVMBuildLoad2(self.builder, LLVMGetAllocatedType(local_ref), local_ref, name.as_ptr())
+        self.local_refs[local_ref.i].expect("Local get before set")
     }
 
     unsafe fn build_capture_load(&mut self, capture_ref: &CaptureRef) -> LLVMValueRef {
