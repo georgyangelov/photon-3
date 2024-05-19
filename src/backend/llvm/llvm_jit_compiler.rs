@@ -124,7 +124,14 @@ impl <'a> LLVMJITCompiler<'a> {
     pub fn compile(&'a mut self) -> extern "C" fn() -> Any {
         unsafe {
             // self.compile_fn(&self.mir_module.runtime_main, "main");
-            FunctionCompiler::compile(&mut self.context, self.mir_module, self.runtime_main_fn, "main", false);
+            FunctionCompiler::compile(
+                &mut self.context,
+                self.mir_module,
+                self.runtime_main_fn,
+                "main",
+                false,
+                false
+            );
 
             self.jit_compile_module();
 

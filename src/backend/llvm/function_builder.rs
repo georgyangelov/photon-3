@@ -1,5 +1,6 @@
 use std::ffi::{c_uint, c_ulonglong, CString};
 use llvm_sys::core::*;
+use llvm_sys::LLVMLinkage;
 use llvm_sys::prelude::*;
 use lib::{Any, AnyT};
 use crate::backend::llvm::{c_str, CompilerModuleContext};
@@ -39,7 +40,8 @@ impl <'a> FunctionCompiler<'a> {
         mir_module: &'a compiler::Module,
         func: &'a mir::Function,
         name: &str,
-        with_trampoline: bool
+        with_trampoline: bool,
+        internal: bool
     ) -> FunctionCompileResult {
         let mut param_types = Vec::with_capacity(func.param_count + 1);
         for _ in 0..func.param_count {
@@ -55,6 +57,11 @@ impl <'a> FunctionCompiler<'a> {
 
         let fn_name = CString::new(name).unwrap();
         let func_ref = LLVMAddFunction(c.module, fn_name.as_ptr(), type_ref);
+
+        // LLVMAddAttributeAtIndex(func_ref, 0, LLVMInternal)
+        if internal {
+            LLVMSetLinkage(func_ref, LLVMLinkage::LLVMInternalLinkage);
+        }
 
         let entry_block = LLVMAppendBasicBlockInContext(c.context, func_ref, c_str!("entry"));
         let builder = LLVMCreateBuilderInContext(c.context);
@@ -97,7 +104,7 @@ impl <'a> FunctionCompiler<'a> {
         LLVMBuildRet(builder, result);
 
         let trampoline_ref = if with_trampoline {
-            Some(function_builder.compile_fn_trampoline(name, type_ref, func_ref, closure_t.is_some()))
+            Some(function_builder.compile_fn_trampoline(name, type_ref, func_ref, closure_t.is_some(), internal))
         } else { None };
 
         LLVMDisposeBuilder(builder);
@@ -186,6 +193,7 @@ impl <'a> FunctionCompiler<'a> {
                     &self.mir_module,
                     func,
                     &func_name,
+                    true,
                     true
                 );
 
@@ -234,7 +242,8 @@ impl <'a> FunctionCompiler<'a> {
         fn_name: &str,
         compiled_fn_type: LLVMTypeRef,
         compiled_ref: LLVMValueRef,
-        has_capture_struct: bool
+        has_capture_struct: bool,
+        internal: bool
     ) -> LLVMValueRef {
         let c_name = CString::new(format!("{}_trampoline", fn_name)).unwrap();
         let mut args = Vec::with_capacity(3);
@@ -249,6 +258,10 @@ impl <'a> FunctionCompiler<'a> {
 
         let trampoline_t = LLVMFunctionType(self.c.any_t, args.as_mut_ptr(), args.len() as u32, 0);
         let trampoline_fn_ref = LLVMAddFunction(self.c.module, c_name.as_ptr(), trampoline_t);
+
+        if internal {
+            LLVMSetLinkage(trampoline_fn_ref, LLVMLinkage::LLVMInternalLinkage);
+        }
 
         let block = LLVMAppendBasicBlockInContext(self.c.context, trampoline_fn_ref, c_str!("entry"));
 
