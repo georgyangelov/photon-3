@@ -144,9 +144,32 @@ impl <'a> LLVMJITCompiler<'a> {
         }
     }
 
+    pub fn set_comptime_exports(&mut self, values: Vec<&Any>) {
+        assert_eq!(values.len(), self.mir_module.comptime_export_count);
+
+        unsafe {
+            for i in 0..self.mir_module.comptime_export_count {
+                let global_ref = self.context.compile_time_slots[i];
+
+                let value = values[i];
+                match &value.typ {
+                    AnyT::None | AnyT::Bool | AnyT::Int | AnyT::Float => {}
+                    AnyT::Closure | AnyT::FunctionPtr => todo!("This will break function pointers, need to somehow map them")
+                }
+
+                let (t, v) = value.into_raw();
+                let const_any = LLVMConstNamedStruct(self.context.any_t, [
+                    LLVMConstInt(LLVMInt32TypeInContext(self.context.context), t as u64, 0),
+                    LLVMConstInt(LLVMInt64TypeInContext(self.context.context), std::mem::transmute(v), 0),
+                ].as_mut_ptr(), 2);
+
+                LLVMSetInitializer(global_ref, const_any);
+            }
+        }
+    }
+
     pub fn compile(&mut self) -> unsafe extern "C" fn() -> Any {
         unsafe {
-            // self.compile_fn(&self.mir_module.runtime_main, "main");
             FunctionCompiler::compile(
                 &mut self.context,
                 self.mir_module,
@@ -173,43 +196,6 @@ impl <'a> LLVMJITCompiler<'a> {
             self.print_module();
 
             std::mem::transmute(self.jit_find_symbol_address("main"))
-        }
-    }
-
-    // pub fn set_comptime_exports_at_runtime(&mut self, values: Vec<Any>) {
-    //     assert_eq!(values.len(), self.mir_module.comptime_export_count);
-    //
-    //     unsafe {
-    //         for i in 0..self.mir_module.comptime_export_count {
-    //             let address = self.jit_find_symbol_address(&Self::global_symbol_name(i));
-    //             let value_ptr: *mut Any = std::mem::transmute(address);
-    //
-    //             *value_ptr = values[i];
-    //         }
-    //     }
-    // }
-
-    pub fn set_comptime_exports(&mut self, values: Vec<&Any>) {
-        assert_eq!(values.len(), self.mir_module.comptime_export_count);
-
-        unsafe {
-            for i in 0..self.mir_module.comptime_export_count {
-                let global_ref = self.context.compile_time_slots[i];
-
-                let value = values[i];
-                match &value.typ {
-                    AnyT::None | AnyT::Bool | AnyT::Int | AnyT::Float => {}
-                    AnyT::Closure | AnyT::FunctionPtr => todo!("This will break function pointers, need to somehow map them")
-                }
-
-                let (t, v) = value.into_raw();
-                let const_any = LLVMConstNamedStruct(self.context.any_t, [
-                    LLVMConstInt(LLVMInt32TypeInContext(self.context.context), t as u64, 0),
-                    LLVMConstInt(LLVMInt64TypeInContext(self.context.context), std::mem::transmute(v), 0),
-                ].as_mut_ptr(), 2);
-
-                LLVMSetInitializer(global_ref, const_any);
-            }
         }
     }
 

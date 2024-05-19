@@ -87,7 +87,7 @@ fn run(code: &str) -> Any {
     let mut comptime_jit = LLVMJITCompiler::new(&module, true);
     let mut runtime_jit = LLVMJITCompiler::new(&module, false);
 
-    let (comptime_result, comptime_exports) = run_comptime(&mut comptime_jit);
+    let (_, comptime_exports) = run_comptime(&mut comptime_jit);
     let runtime_result = run_runtime(&mut runtime_jit, comptime_exports);
 
     runtime_result
@@ -105,7 +105,6 @@ fn run_comptime<'a>(jit: &'a mut LLVMJITCompiler) -> (Any, Vec<&'a Any>) {
 }
 
 fn run_runtime(jit: &mut LLVMJITCompiler, comptime_exports: Vec<&Any>) -> Any {
-
     jit.set_comptime_exports(comptime_exports);
 
     let main_fn = jit.compile();
