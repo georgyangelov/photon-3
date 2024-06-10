@@ -1,9 +1,6 @@
-use std::io;
-use std::io::Write;
 use lib::Any;
 use crate::backend::llvm::LLVMJITCompiler;
-use crate::compiler;
-use crate::compiler::{mir, ModuleCompiler};
+use crate::compiler::ModuleCompiler;
 use crate::frontend::{AST, Lexer, ParseError, Parser};
 
 #[test]
