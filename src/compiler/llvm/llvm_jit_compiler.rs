@@ -11,8 +11,8 @@ use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
 use lib::{Any, AnyT};
-use crate::backend::llvm::host_fn::HostFn;
-use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
+use crate::compiler::llvm::host_fn::HostFn;
+use crate::compiler::llvm::symbol_name_counter::SymbolNameCounter;
 
 macro_rules! c_str {
     ($s:expr) => (
@@ -21,7 +21,7 @@ macro_rules! c_str {
 }
 
 pub(crate) use c_str;
-use crate::backend::llvm::function_builder::FunctionCompiler;
+use crate::compiler::llvm::function_builder::FunctionCompiler;
 use crate::mir;
 
 pub struct LLVMJITCompiler<'a> {

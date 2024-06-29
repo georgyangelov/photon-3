@@ -14,7 +14,7 @@ use crate::llvm_test::llvm_test;
 mod ast;
 mod tests;
 mod mir;
-mod backend;
+mod compiler;
 mod llvm_test;
 mod llvm_test_2;
 

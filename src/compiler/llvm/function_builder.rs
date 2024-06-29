@@ -3,8 +3,8 @@ use llvm_sys::core::*;
 use llvm_sys::LLVMLinkage;
 use llvm_sys::prelude::*;
 use lib::{Any, AnyT};
-use crate::backend::llvm::{c_str, CompilerModuleContext};
-use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
+use crate::compiler::llvm::{c_str, CompilerModuleContext};
+use crate::compiler::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::mir::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
 use crate::mir;
 

@@ -2,7 +2,7 @@
 // use std::os::raw::c_char;
 // use binaryen_sys::*;
 // use lib::{ValueT, ValueV};
-// use crate::backend::wasm::wasm_compiler::CompileMirResult::{NoResult, Result};
+// use crate::compiler::wasm::wasm_compiler::CompileMirResult::{NoResult, Result};
 // use crate::mir;
 // use crate::mir::mir;
 // use crate::mir::mir::Node;

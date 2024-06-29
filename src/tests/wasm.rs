@@ -2,7 +2,7 @@
 // use std::io::Write;
 // // use wasmtime::{Engine, Linker, Module, Store};
 // use lib::{ValueT, ValueV};
-// // use crate::backend::wasm::WasmCompiler;
+// // use crate::compiler::wasm::WasmCompiler;
 // use crate::mir::ModuleCompiler;
 // use crate::ast::{AST, Lexer, ParseError, Parser};
 //

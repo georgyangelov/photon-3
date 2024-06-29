@@ -1,5 +1,5 @@
 use lib::Any;
-use crate::backend::llvm::LLVMJITCompiler;
+use crate::compiler::llvm::LLVMJITCompiler;
 use crate::mir::Compiler;
 use crate::ast;
 

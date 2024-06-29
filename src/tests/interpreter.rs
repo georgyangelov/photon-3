@@ -1,6 +1,6 @@
 use crate::mir::Compiler;
 use crate::ast::{AST, Lexer, ParseError, Parser};
-use crate::backend::interpreter::{Interpreter, Value};
+use crate::compiler::interpreter::{Interpreter, Value};
 
 macro_rules! expect {
     ($a:expr, $b:pat) => {
