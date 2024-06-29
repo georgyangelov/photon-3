@@ -1,6 +1,6 @@
 use lib::Any;
 use crate::backend::llvm::LLVMJITCompiler;
-use crate::mir::MirModuleCompiler;
+use crate::mir::Compiler;
 use crate::frontend::{AST, Lexer, ParseError, Parser};
 
 #[test]
@@ -95,7 +95,7 @@ fn test_using_comptime_vals_in_comptime_exprs() {
 
 fn run(code: &str) -> Any {
     let ast = parse(code).expect("Could not parse");
-    let module = MirModuleCompiler::compile_module(ast).expect("Could not compile");
+    let module = Compiler::compile_module(ast).expect("Could not compile");
 
     let mut comptime_jit = LLVMJITCompiler::new(&module, true);
     let mut runtime_jit = LLVMJITCompiler::new(&module, false);

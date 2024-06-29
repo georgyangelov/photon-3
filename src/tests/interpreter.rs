@@ -1,4 +1,4 @@
-use crate::mir::MirModuleCompiler;
+use crate::mir::Compiler;
 use crate::frontend::{AST, Lexer, ParseError, Parser};
 use crate::backend::interpreter::{Interpreter, Value};
 
@@ -160,7 +160,7 @@ fn test_ifs() {
 
 fn run(code: &str) -> (Vec<Value>, Value) {
     let ast = parse(code).expect("Could not parse");
-    let module = MirModuleCompiler::compile_module(ast).expect("Could not compile");
+    let module = Compiler::compile_module(ast).expect("Could not compile");
 
     let mut interpreter = Interpreter::new();
 

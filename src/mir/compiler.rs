@@ -10,7 +10,7 @@ struct FunctionTemplate {
     body: AST
 }
 
-pub struct MirModuleCompiler {
+pub struct Compiler {
     pub const_strings: Vec<Box<str>>,
 
     // pub compile_time_slots: Vec<Any>,
@@ -21,7 +21,7 @@ pub struct MirModuleCompiler {
     pub functions: Vec<mir::Function>
 }
 
-impl MirModuleCompiler {
+impl Compiler {
     pub fn compile_module(ast: AST) -> Result<mir::Module, CompileError> {
         let module_location = ast.location.clone();
 
@@ -40,7 +40,7 @@ impl MirModuleCompiler {
             ComptimeMainStackFrame::new()
         );
 
-        let mut builder = MirModuleCompiler {
+        let mut builder = Compiler {
             const_strings: Vec::new(),
             compile_time_main: Vec::new(),
             functions: Vec::new()
