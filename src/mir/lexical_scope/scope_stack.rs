@@ -1,4 +1,4 @@
-use crate::compiler::lexical_scope::*;
+use crate::mir::lexical_scope::*;
 
 pub struct ScopeStack {
     stack: Vec<Scope>

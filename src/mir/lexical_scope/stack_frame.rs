@@ -1,4 +1,4 @@
-use crate::compiler::lexical_scope::*;
+use crate::mir::lexical_scope::*;
 
 /// A function/closure scope - it has locals and can reference variables from parent scopes by
 /// capturing them.

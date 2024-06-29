@@ -1,4 +1,4 @@
-use crate::compiler::MirModuleCompiler;
+use crate::mir::MirModuleCompiler;
 use crate::frontend::{AST, Lexer, ParseError, Parser};
 use crate::backend::interpreter::{Interpreter, Value};
 

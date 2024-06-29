@@ -1,4 +1,4 @@
-use crate::compiler::lexical_scope::*;
+use crate::mir::lexical_scope::*;
 
 /// A simple block scope - it defines new variables in its closest parent stack frame and ensures
 /// the defined name is only accessible by the children of the block scope.

@@ -22,7 +22,7 @@ macro_rules! c_str {
 
 pub(crate) use c_str;
 use crate::backend::llvm::function_builder::FunctionCompiler;
-use crate::compiler::mir;
+use crate::mir;
 
 pub struct LLVMJITCompiler<'a> {
     thread_safe_context: LLVMOrcThreadSafeContextRef,

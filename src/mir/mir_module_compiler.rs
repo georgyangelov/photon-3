@@ -1,5 +1,5 @@
-use crate::compiler::{mir};
-use crate::compiler::lexical_scope::*;
+use crate::mir::{mir};
+use crate::mir::lexical_scope::*;
 use crate::frontend::*;
 use std::borrow::Borrow;
 

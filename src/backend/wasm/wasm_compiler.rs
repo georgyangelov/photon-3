@@ -3,12 +3,12 @@
 // use binaryen_sys::*;
 // use lib::{ValueT, ValueV};
 // use crate::backend::wasm::wasm_compiler::CompileMirResult::{NoResult, Result};
-// use crate::compiler;
-// use crate::compiler::mir;
-// use crate::compiler::mir::Node;
+// use crate::mir;
+// use crate::mir::mir;
+// use crate::mir::mir::Node;
 //
 // pub struct WasmCompiler<'a> {
-//     mir_module: &'a compiler::Module,
+//     mir_module: &'a mir::Module,
 //     module: BinaryenModuleRef,
 //     any_type: BinaryenType,
 //
@@ -22,7 +22,7 @@
 // }
 //
 // impl <'a> WasmCompiler<'a> {
-//     pub fn new(mir_module: &'a compiler::Module) -> Self {
+//     pub fn new(mir_module: &'a mir::Module) -> Self {
 //         let module = unsafe {
 //             let module = BinaryenModuleCreate();
 //

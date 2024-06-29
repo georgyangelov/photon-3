@@ -5,9 +5,8 @@ use llvm_sys::prelude::*;
 use lib::{Any, AnyT};
 use crate::backend::llvm::{c_str, CompilerModuleContext};
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
-use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
-use crate::compiler::mir;
-use crate::compiler::mir::Node;
+use crate::mir::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
+use crate::mir;
 
 pub struct FunctionCompiler<'a> {
     local_refs: Vec<Option<LLVMValueRef>>,
@@ -120,9 +119,9 @@ impl <'a> FunctionCompiler<'a> {
     /// Returns an LLVMValueRef if the statement returns a value
     unsafe fn compile_mir(&mut self, mir: &mir::MIR) -> Option<LLVMValueRef> {
         match &mir.node {
-            Node::Nop => None,
+            mir::Node::Nop => None,
 
-            Node::CompileTimeSet(export_ref, value_mir) => {
+            mir::Node::CompileTimeSet(export_ref, value_mir) => {
                 let value_ref = self.compile_mir(value_mir);
                 let value_ref = self.coalesce_none(value_ref);
                 let export_slot_ptr = self.c.compile_time_slots[export_ref.i];
@@ -131,26 +130,26 @@ impl <'a> FunctionCompiler<'a> {
 
                 None
             },
-            Node::CompileTimeGet(export_ref) => {
+            mir::Node::CompileTimeGet(export_ref) => {
                 let export_slot_ptr = self.c.compile_time_slots[export_ref.i];
                 let name = self.stmt_name_gen.next("global_export_load");
 
                 Some(LLVMBuildLoad2(self.builder, self.c.any_t, export_slot_ptr, name.as_ptr()))
             },
 
-            Node::GlobalRef(_) => todo!("Support GlobalRef"),
-            Node::ConstStringRef(_) => todo!("Support ConstStringRef"),
+            mir::Node::GlobalRef(_) => todo!("Support GlobalRef"),
+            mir::Node::ConstStringRef(_) => todo!("Support ConstStringRef"),
 
             // TODO: For these 3 define a parameter "expected_type" and build them in whichever type (e.g. Any or Int)
             //       is necessary.
-            Node::LiteralBool(value) => Some(self.build_const_any(Any::bool(*value))),
-            Node::LiteralI64(value) => Some(self.build_const_any(Any::int(*value))),
-            Node::LiteralF64(value) => Some(self.build_const_any(Any::float(*value))),
+            mir::Node::LiteralBool(value) => Some(self.build_const_any(Any::bool(*value))),
+            mir::Node::LiteralI64(value) => Some(self.build_const_any(Any::int(*value))),
+            mir::Node::LiteralF64(value) => Some(self.build_const_any(Any::float(*value))),
 
-            Node::ParamRef(param_ref) => Some(self.build_param_load(param_ref)),
-            Node::CaptureRef(capture_ref) => Some(self.build_capture_load(capture_ref)),
+            mir::Node::ParamRef(param_ref) => Some(self.build_param_load(param_ref)),
+            mir::Node::CaptureRef(capture_ref) => Some(self.build_capture_load(capture_ref)),
 
-            Node::LocalSet(local_ref, value_mir) => {
+            mir::Node::LocalSet(local_ref, value_mir) => {
                 let value_ref = self.compile_mir(value_mir);
                 let value_ref = self.coalesce_none(value_ref);
 
@@ -158,9 +157,9 @@ impl <'a> FunctionCompiler<'a> {
 
                 None
             },
-            Node::LocalGet(local_ref) => Some(self.build_local_load(local_ref)),
+            mir::Node::LocalGet(local_ref) => Some(self.build_local_load(local_ref)),
 
-            Node::Block(mirs) => {
+            mir::Node::Block(mirs) => {
                 let mut result = None;
 
                 for mir in mirs {
@@ -170,7 +169,7 @@ impl <'a> FunctionCompiler<'a> {
                 result
             },
 
-            Node::Call(name, target_mir, arg_mirs) => {
+            mir::Node::Call(name, target_mir, arg_mirs) => {
                 let mut args = Vec::with_capacity(arg_mirs.len() + 1);
 
                 let target_ref = self.compile_mir(target_mir);
@@ -196,7 +195,7 @@ impl <'a> FunctionCompiler<'a> {
                 Some(result_ref)
             },
 
-            Node::CreateClosure(mir_func_ref, captures) => {
+            mir::Node::CreateClosure(mir_func_ref, captures) => {
                 // TODO: Infer the function name from the assignment
                 let func_name = self.c.func_name_gen.next_string("fn");
                 let func = &self.mir_module.functions[mir_func_ref.i];
@@ -246,7 +245,7 @@ impl <'a> FunctionCompiler<'a> {
                 }
             },
 
-            Node::If(_, _, _) => todo!("Support If")
+            mir::Node::If(_, _, _) => todo!("Support If")
         }
     }
 

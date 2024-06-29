@@ -1,9 +1,8 @@
 use std::rc::Rc;
-use crate::compiler::mir::{Function, Node};
-use crate::compiler::mir;
+use crate::mir;
 use crate::backend::interpreter::{Closure, Value};
 use std::borrow::Borrow;
-use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
+use crate::mir::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
 
 pub struct Interpreter {
     stack: Vec<Value>,
@@ -59,35 +58,35 @@ impl Interpreter {
 
     fn eval_mir(&mut self, module: &mir::Module, exports: &mut Vec<Value>, func: &mir::Function, mir: &mir::MIR) -> Value {
         match &mir.node {
-            Node::Nop => Value::None,
+            mir::Node::Nop => Value::None,
 
-            Node::CompileTimeGet(export_ref) => exports[export_ref.i].clone(),
-            Node::CompileTimeSet(export_ref, mir) => {
+            mir::Node::CompileTimeGet(export_ref) => exports[export_ref.i].clone(),
+            mir::Node::CompileTimeSet(export_ref, mir) => {
                 let value = self.eval_mir(module, exports, func, mir);
 
                 exports[export_ref.i] = value;
 
                 Value::None
             },
-            Node::GlobalRef(_) => todo!("Implement GlobalRef eval"),
-            Node::ConstStringRef(_) => todo!("Implement ConstStringRef eval"),
+            mir::Node::GlobalRef(_) => todo!("Implement GlobalRef eval"),
+            mir::Node::ConstStringRef(_) => todo!("Implement ConstStringRef eval"),
 
-            Node::LiteralBool(value) => Value::Bool(*value),
-            Node::LiteralI64(value) => Value::I64(*value),
-            Node::LiteralF64(value) => Value::F64(*value),
+            mir::Node::LiteralBool(value) => Value::Bool(*value),
+            mir::Node::LiteralI64(value) => Value::I64(*value),
+            mir::Node::LiteralF64(value) => Value::F64(*value),
 
-            Node::CaptureRef(capture_ref) => self.stack[self.stack_offset + capture_ref.i].clone(),
+            mir::Node::CaptureRef(capture_ref) => self.stack[self.stack_offset + capture_ref.i].clone(),
 
-            Node::ParamRef(param_ref) => self.stack[self.stack_offset + func.captures.len() + param_ref.i].clone(),
+            mir::Node::ParamRef(param_ref) => self.stack[self.stack_offset + func.captures.len() + param_ref.i].clone(),
 
-            Node::LocalSet(local_ref, mir) => {
+            mir::Node::LocalSet(local_ref, mir) => {
                 self.stack[self.stack_offset + func.captures.len() + func.param_count + local_ref.i] = self.eval_mir(module, exports, func, mir);
 
                 Value::None
             },
-            Node::LocalGet(local_ref) => self.stack[self.stack_offset + func.captures.len() + func.param_count + local_ref.i].clone(),
+            mir::Node::LocalGet(local_ref) => self.stack[self.stack_offset + func.captures.len() + func.param_count + local_ref.i].clone(),
 
-            Node::Block(mirs) => {
+            mir::Node::Block(mirs) => {
                 let mut result = Value::None;
 
                 for mir in mirs {
@@ -97,7 +96,7 @@ impl Interpreter {
                 result
             },
 
-            Node::Call(name, target, args) => {
+            mir::Node::Call(name, target, args) => {
                 let target = self.eval_mir(module, exports, func, target);
                 let func_to_call = self.find_func(&target, name);
 
@@ -130,7 +129,7 @@ impl Interpreter {
                 }
             },
 
-            Node::CreateClosure(fn_ref, capture_froms) => {
+            mir::Node::CreateClosure(fn_ref, capture_froms) => {
                 let mut values = Vec::new();
                 for capture_from in capture_froms {
                     values.push(self.stack[self.stack_offset + Self::stack_index_of(func, capture_from)].clone());
@@ -142,7 +141,7 @@ impl Interpreter {
                 }))
             }
 
-            Node::If(condition, on_true, on_false) => {
+            mir::Node::If(condition, on_true, on_false) => {
                 let condition_value = self.eval_mir(module, exports, func, condition);
 
                 let result = if condition_value.expect_bool() {
@@ -191,7 +190,7 @@ impl Interpreter {
     fn push_stack_for_call(
         &mut self,
         parent_frame_size: usize,
-        target_func: &Function,
+        target_func: &mir::Function,
         args: Vec<Value>,
         captures: &[Value]
     ) {

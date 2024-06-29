@@ -13,7 +13,7 @@ use crate::llvm_test::llvm_test;
 
 mod frontend;
 mod tests;
-mod compiler;
+mod mir;
 mod backend;
 mod llvm_test;
 mod llvm_test_2;

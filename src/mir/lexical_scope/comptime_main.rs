@@ -1,4 +1,4 @@
-use crate::compiler::lexical_scope::*;
+use crate::mir::lexical_scope::*;
 
 /// The compile-time main function. There is only one such scope per-module and it executes the
 /// compile-time code.

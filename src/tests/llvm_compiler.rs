@@ -1,6 +1,6 @@
 use lib::Any;
 use crate::backend::llvm::LLVMJITCompiler;
-use crate::compiler::MirModuleCompiler;
+use crate::mir::MirModuleCompiler;
 use crate::frontend::{AST, Lexer, ParseError, Parser};
 
 #[test]

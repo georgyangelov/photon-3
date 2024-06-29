@@ -3,7 +3,7 @@
 // // use wasmtime::{Engine, Linker, Module, Store};
 // use lib::{ValueT, ValueV};
 // // use crate::backend::wasm::WasmCompiler;
-// use crate::compiler::ModuleCompiler;
+// use crate::mir::ModuleCompiler;
 // use crate::frontend::{AST, Lexer, ParseError, Parser};
 //
 // #[test]
