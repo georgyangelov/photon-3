@@ -95,6 +95,7 @@ impl Compiler {
         let stack_frame = scope.pop_stack_frame();
 
         Ok(mir::Function {
+            // TODO: Remove this frame_layout
             frame_layout: mir::FrameLayout {
                 size: stack_frame.locals.len()
             },

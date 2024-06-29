@@ -50,8 +50,8 @@ pub enum Node {
     ParamRef(ParamRef),
     CaptureRef(CaptureRef),
 
-    LocalSet(StackFrameLocalRef, Box<MIR>),
     LocalGet(StackFrameLocalRef),
+    LocalSet(StackFrameLocalRef, Box<MIR>),
 
     Block(Vec<MIR>),
 

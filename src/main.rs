@@ -1,10 +1,10 @@
 extern crate core;
 
-use std::ffi::CString;
-use std::mem::size_of;
-use std::os::raw::c_char;
-use std::ptr;
-use std::ptr::slice_from_raw_parts_mut;
+// use std::ffi::CString;
+// use std::mem::size_of;
+// use std::os::raw::c_char;
+// use std::ptr;
+// use std::ptr::slice_from_raw_parts_mut;
 // use binaryen_sys::*;
 // use wasmtime::{Engine, Instance, Linker, Memory, Module, Store};
 // use crate::llvm_test_2::llvm_test_2;
@@ -17,6 +17,7 @@ mod mir;
 mod compiler;
 mod llvm_test;
 mod llvm_test_2;
+mod lir;
 
 fn main() {
     unsafe { llvm_test() }
