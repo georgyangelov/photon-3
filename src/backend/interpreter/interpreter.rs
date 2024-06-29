@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use crate::compiler::mir::{Function, Node};
-use crate::compiler::{mir, Module};
+use crate::compiler::mir;
 use crate::backend::interpreter::{Closure, Value};
 use std::borrow::Borrow;
 use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
@@ -29,7 +29,7 @@ impl Interpreter {
         }
     }
 
-    pub fn eval_module_comptime(&mut self, module: &Module) -> ModuleEvalResult {
+    pub fn eval_module_comptime(&mut self, module: &mir::Module) -> ModuleEvalResult {
         let mut comptime_exports = Vec::new();
         comptime_exports.resize(module.comptime_export_count, Value::None);
 
@@ -46,7 +46,7 @@ impl Interpreter {
         }
     }
 
-    pub fn eval_module_runtime(&mut self, module: &Module, mut comptime_exports: Vec<Value>) -> Value {
+    pub fn eval_module_runtime(&mut self, module: &mir::Module, mut comptime_exports: Vec<Value>) -> Value {
         let main = &module.runtime_main;
 
         let current_frame_size = self.current_frame_size;
@@ -57,7 +57,7 @@ impl Interpreter {
         result
     }
 
-    fn eval_mir(&mut self, module: &Module, exports: &mut Vec<Value>, func: &mir::Function, mir: &mir::MIR) -> Value {
+    fn eval_mir(&mut self, module: &mir::Module, exports: &mut Vec<Value>, func: &mir::Function, mir: &mir::MIR) -> Value {
         match &mir.node {
             Node::Nop => Value::None,
 

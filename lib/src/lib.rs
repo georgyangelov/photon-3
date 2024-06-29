@@ -1,5 +1,3 @@
-mod old_value;
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Any {
@@ -14,6 +12,18 @@ pub enum AnyT {
     Bool,
     Int,
     Float,
+
+    AnyT,
+    TypeT,
+    NoneT,
+    BoolT,
+    IntT,
+    FloatT,
+
+    // TODO: Support compound types
+    // StructT,
+    // ClosureT,
+    // InterfaceT,
 
     // TODO: Optimization idea - another variant with no captures that points directly to the function
     Closure,
@@ -50,6 +60,30 @@ impl Any {
             typ: AnyT::Float,
             val: unsafe { std::mem::transmute(value) }
         }
+    }
+
+    pub const fn any_type() -> Self {
+        Any { typ: AnyT::AnyT, val: 0 }
+    }
+
+    pub const fn type_type() -> Self {
+        Any { typ: AnyT::TypeT, val: 0 }
+    }
+
+    pub const fn none_type() -> Self {
+        Any { typ: AnyT::NoneT, val: 0 }
+    }
+
+    pub const fn bool_type() -> Self {
+        Any { typ: AnyT::BoolT, val: 0 }
+    }
+
+    pub const fn int_type() -> Self {
+        Any { typ: AnyT::BoolT, val: 0 }
+    }
+
+    pub const fn float_type() -> Self {
+        Any { typ: AnyT::FloatT, val: 0 }
     }
 
     pub fn into_raw(self) -> (i32, i64) {
@@ -103,28 +137,4 @@ impl Any {
 
         (*ptr_to_ptr_to_fn, std::mem::transmute(val))
     }
-
-    // pub unsafe fn fn_0(self) -> extern "C" fn() -> Any {
-    //     let ptr_to_ptr_to_fn: *const extern "C" fn() -> Any = std::mem::transmute(self.val);
-    //
-    //     *ptr_to_ptr_to_fn
-    // }
-    //
-    // pub unsafe fn fn_1(self) -> extern "C" fn(Any) -> Any {
-    //     let ptr_to_ptr_to_fn: *const extern "C" fn(Any) -> Any = std::mem::transmute(self.val);
-    //
-    //     *ptr_to_ptr_to_fn
-    // }
-    //
-    // pub unsafe fn fn_2(self) -> extern "C" fn(Any, Any) -> Any {
-    //     let ptr_to_ptr_to_fn: *const extern "C" fn(Any, Any) -> Any = std::mem::transmute(self.val);
-    //
-    //     *ptr_to_ptr_to_fn
-    // }
-    //
-    // pub unsafe fn fn_3(self) -> extern "C" fn(Any, Any, Any) -> Any {
-    //     let ptr_to_ptr_to_fn: *const extern "C" fn(Any, Any, Any) -> Any = std::mem::transmute(self.val);
-    //
-    //     *ptr_to_ptr_to_fn
-    // }
 }

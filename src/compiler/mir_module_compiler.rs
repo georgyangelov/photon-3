@@ -1,8 +1,7 @@
 use crate::compiler::{mir};
-use crate::compiler::lexical_scope::{AccessNameRef, ComptimeMainStackFrame, NameAccessError, RootScope, ScopeStack};
-use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue, Location};
+use crate::compiler::lexical_scope::*;
+use crate::frontend::*;
 use std::borrow::Borrow;
-use crate::compiler::mir::{FrameLayout, FunctionRef, MIR};
 
 #[derive(Debug)]
 pub enum CompileError {}
@@ -11,29 +10,19 @@ struct FunctionTemplate {
     body: AST
 }
 
-pub struct ModuleCompiler {
+pub struct MirModuleCompiler {
     pub const_strings: Vec<Box<str>>,
 
     // pub compile_time_slots: Vec<Any>,
     // pub compile_time_functions: Vec<lir::Function>,
     // pub compile_time_scope: BlockScope<'a>,
-    pub compile_time_main: Vec<MIR>,
+    pub compile_time_main: Vec<mir::MIR>,
 
     pub functions: Vec<mir::Function>
 }
 
-pub struct Module {
-    // TODO: Optimize away functions that are used only from comptime
-    pub functions: Vec<mir::Function>,
-
-    pub comptime_export_count: usize,
-    pub comptime_main: mir::Function,
-
-    pub runtime_main: mir::Function
-}
-
-impl ModuleCompiler {
-    pub fn compile_module(ast: AST) -> Result<Module, CompileError> {
+impl MirModuleCompiler {
+    pub fn compile_module(ast: AST) -> Result<mir::Module, CompileError> {
         let module_location = ast.location.clone();
 
         // The module is an implicit function, it's executed like one
@@ -51,7 +40,7 @@ impl ModuleCompiler {
             ComptimeMainStackFrame::new()
         );
 
-        let mut builder = ModuleCompiler {
+        let mut builder = MirModuleCompiler {
             const_strings: Vec::new(),
             compile_time_main: Vec::new(),
             functions: Vec::new()
@@ -74,7 +63,7 @@ impl ModuleCompiler {
             captures: vec![]
         };
 
-        Ok(Module {
+        Ok(mir::Module {
             // compile_time_functions: builder.compile_time_functions,
             // run_time_functions: builder.run_time_functions
             functions: builder.functions,
@@ -106,7 +95,7 @@ impl ModuleCompiler {
         let stack_frame = scope.pop_stack_frame();
 
         Ok(mir::Function {
-            frame_layout: FrameLayout {
+            frame_layout: mir::FrameLayout {
                 size: stack_frame.locals.len()
             },
             param_count,
@@ -209,7 +198,7 @@ impl ModuleCompiler {
 
             ASTValue::Function(func) => {
                 let func_mir = self.compile_function(scope, func)?;
-                let func_ref = FunctionRef { i: self.functions.len() };
+                let func_ref = mir::FunctionRef { i: self.functions.len() };
                 let captures = func_mir.captures.clone();
 
                 self.functions.push(func_mir);

@@ -1,5 +1,27 @@
-use crate::compiler::lexical_scope::{ParamRef, Capture, CaptureRef, ComptimeExportRef, GlobalRef, StackFrameLocalRef, CaptureFrom};
+use crate::compiler::lexical_scope::*;
 use crate::frontend::Location;
+
+#[derive(Debug)]
+pub struct Module {
+    // TODO: Optimize away functions that are used only from comptime
+    pub functions: Vec<Function>,
+
+    pub comptime_export_count: usize,
+    pub comptime_main: Function,
+
+    pub runtime_main: Function
+}
+
+#[derive(Debug)]
+pub struct Function {
+    // pub param_types: Vec<ComptimeExportRef>,
+    pub frame_layout: FrameLayout,
+    pub param_count: usize,
+    pub local_count: usize,
+    pub captures: Vec<Capture>,
+    pub body: MIR,
+    // pub return_type: ComptimeExportRef
+}
 
 #[derive(Debug)]
 pub struct MIR {
@@ -37,21 +59,6 @@ pub enum Node {
     CreateClosure(FunctionRef, Vec<CaptureFrom>),
 
     If(Box<MIR>, Box<MIR>, Option<Box<MIR>>),
-}
-
-pub struct FunctionTemplate {
-    pub body: MIR
-}
-
-#[derive(Debug)]
-pub struct Function {
-    // pub param_types: Vec<ComptimeExportRef>,
-    pub frame_layout: FrameLayout,
-    pub param_count: usize,
-    pub local_count: usize,
-    pub captures: Vec<Capture>,
-    pub body: MIR,
-    // pub return_type: ComptimeExportRef
 }
 
 #[derive(Debug)]

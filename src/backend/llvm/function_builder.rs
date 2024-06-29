@@ -5,7 +5,6 @@ use llvm_sys::prelude::*;
 use lib::{Any, AnyT};
 use crate::backend::llvm::{c_str, CompilerModuleContext};
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
-use crate::compiler;
 use crate::compiler::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
 use crate::compiler::mir;
 use crate::compiler::mir::Node;
@@ -17,7 +16,7 @@ pub struct FunctionCompiler<'a> {
 
     c: &'a mut CompilerModuleContext,
 
-    mir_module: &'a compiler::Module,
+    mir_module: &'a mir::Module,
     func: &'a mir::Function,
     func_ref: LLVMValueRef,
     builder: LLVMBuilderRef,
@@ -37,7 +36,7 @@ pub struct FunctionCompileResult {
 impl <'a> FunctionCompiler<'a> {
     pub unsafe fn compile(
         c: &'a mut CompilerModuleContext,
-        mir_module: &'a compiler::Module,
+        mir_module: &'a mir::Module,
         func: &'a mir::Function,
         name: &str,
         with_trampoline: bool,

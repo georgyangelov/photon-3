@@ -13,7 +13,6 @@ use llvm_sys::transforms::pass_builder::*;
 use lib::{Any, AnyT};
 use crate::backend::llvm::host_fn::HostFn;
 use crate::backend::llvm::symbol_name_counter::SymbolNameCounter;
-use crate::compiler;
 
 macro_rules! c_str {
     ($s:expr) => (
@@ -30,7 +29,7 @@ pub struct LLVMJITCompiler<'a> {
     context: CompilerModuleContext,
     jit: LLVMOrcLLJITRef,
 
-    mir_module: &'a compiler::Module,
+    mir_module: &'a mir::Module,
     main_fn: &'a mir::Function
 }
 
@@ -57,7 +56,7 @@ pub struct CompilerModuleContext {
 // }
 
 impl <'a> LLVMJITCompiler<'a> {
-    pub fn new(mir_module: &'a compiler::Module, compile_time: bool) -> Self {
+    pub fn new(mir_module: &'a mir::Module, compile_time: bool) -> Self {
         unsafe {
             LLVM_InitializeNativeTarget();
             LLVM_InitializeNativeAsmPrinter();
@@ -154,6 +153,7 @@ impl <'a> LLVMJITCompiler<'a> {
                 let value = values[i];
                 match &value.typ {
                     AnyT::None | AnyT::Bool | AnyT::Int | AnyT::Float => {}
+                    AnyT::NoneT | AnyT::AnyT | AnyT::TypeT | AnyT::BoolT | AnyT::IntT | AnyT::FloatT => {},
                     AnyT::Closure | AnyT::FunctionPtr => todo!("This will break function pointers, need to somehow map them")
                 }
 
