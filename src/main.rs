@@ -11,7 +11,7 @@ use std::ptr::slice_from_raw_parts_mut;
 use crate::llvm_test::llvm_test;
 // use runtime::Position;
 
-mod frontend;
+mod ast;
 mod tests;
 mod mir;
 mod backend;

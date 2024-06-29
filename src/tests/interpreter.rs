@@ -1,5 +1,5 @@
 use crate::mir::Compiler;
-use crate::frontend::{AST, Lexer, ParseError, Parser};
+use crate::ast::{AST, Lexer, ParseError, Parser};
 use crate::backend::interpreter::{Interpreter, Value};
 
 macro_rules! expect {

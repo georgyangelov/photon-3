@@ -1,7 +1,7 @@
 use lib::Any;
 use crate::backend::llvm::LLVMJITCompiler;
 use crate::mir::Compiler;
-use crate::frontend::{AST, Lexer, ParseError, Parser};
+use crate::ast;
 
 #[test]
 fn test_literals() {
@@ -127,9 +127,9 @@ fn run_runtime(jit: &mut LLVMJITCompiler, comptime_exports: Vec<&Any>) -> Any {
     result
 }
 
-fn parse(code: &str) -> Result<AST, ParseError> {
-    let lexer = Lexer::new("<test>", code.chars());
-    let mut parser = Parser::new(lexer);
+fn parse(code: &str) -> Result<ast::AST, ast::ParseError> {
+    let lexer = ast::Lexer::new("<test>", code.chars());
+    let mut parser = ast::Parser::new(lexer);
 
     parser.read_all_as_block()
 }

@@ -1,4 +1,4 @@
-use crate::frontend::{Lexer, ParseError, Parser};
+use crate::ast::{Lexer, ParseError, Parser};
 
 #[test]
 fn parses_number_literals() {

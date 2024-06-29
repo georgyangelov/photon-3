@@ -1,13 +1,13 @@
-use crate::mir::{mir};
+use crate::mir;
 use crate::mir::lexical_scope::*;
-use crate::frontend::*;
+use crate::ast;
 use std::borrow::Borrow;
 
 #[derive(Debug)]
 pub enum CompileError {}
 
 struct FunctionTemplate {
-    body: AST
+    body: ast::AST
 }
 
 pub struct Compiler {
@@ -22,11 +22,11 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile_module(ast: AST) -> Result<mir::Module, CompileError> {
+    pub fn compile_module(ast: ast::AST) -> Result<mir::Module, CompileError> {
         let module_location = ast.location.clone();
 
         // The module is an implicit function, it's executed like one
-        let module_fn = ASTFunction {
+        let module_fn = ast::Function {
             params: Vec::new(),
             body: Box::new(ast),
 
@@ -78,7 +78,7 @@ impl Compiler {
     fn compile_function(
         &mut self,
         scope: &mut ScopeStack,
-        ast: ASTFunction
+        ast: ast::Function
     ) -> Result<mir::Function, CompileError> {
         scope.push_stack_frame(ast.params.iter().map(|param| String::from(param.name.clone())).collect());
         scope.push_block();
@@ -108,22 +108,22 @@ impl Compiler {
     fn compile_ast(
         &mut self,
         scope: &mut ScopeStack,
-        ast: AST
+        ast: ast::AST
     ) -> Result<mir::MIR, CompileError> {
         let location = ast.location.clone();
         let node = match ast.value {
-            ASTValue::Literal(ASTLiteral::Bool(value)) => mir::Node::LiteralBool(value),
-            ASTValue::Literal(ASTLiteral::Int(value)) => mir::Node::LiteralI64(value),
-            ASTValue::Literal(ASTLiteral::Float(value)) => mir::Node::LiteralF64(value),
+            ast::Value::Literal(ast::Literal::Bool(value)) => mir::Node::LiteralBool(value),
+            ast::Value::Literal(ast::Literal::Int(value)) => mir::Node::LiteralI64(value),
+            ast::Value::Literal(ast::Literal::Float(value)) => mir::Node::LiteralF64(value),
 
-            ASTValue::Literal(ASTLiteral::String(value)) => {
+            ast::Value::Literal(ast::Literal::String(value)) => {
                 let index = self.const_strings.len();
                 self.const_strings.push(value);
 
                 mir::Node::ConstStringRef(index)
             },
 
-            ASTValue::Block(asts) => {
+            ast::Value::Block(asts) => {
                 scope.push_block();
 
                 let mut mirs = Vec::with_capacity(asts.len());
@@ -149,7 +149,7 @@ impl Compiler {
                 }
             },
 
-            ASTValue::Let { name, value, recursive, comptime } => {
+            ast::Value::Let { name, value, recursive, comptime } => {
                 if recursive {
                     todo!("Support rec vals - should be enough to call define before compile_ast(value)")
                 }
@@ -191,12 +191,12 @@ impl Compiler {
                 }
             },
 
-            ASTValue::NameRef(name) => {
+            ast::Value::NameRef(name) => {
                 return self.access_name_mir(scope, name.borrow(), location)
                     .map_err(|error| todo!("Compile error - name not found or something else"));
             },
 
-            ASTValue::Function(func) => {
+            ast::Value::Function(func) => {
                 let func_mir = self.compile_function(scope, func)?;
                 let func_ref = mir::FunctionRef { i: self.functions.len() };
                 let captures = func_mir.captures.clone();
@@ -211,7 +211,7 @@ impl Compiler {
                 mir::Node::CreateClosure(func_ref, to_capture)
             },
 
-            ASTValue::Call { name, target, args } => {
+            ast::Value::Call { name, target, args } => {
                 let (target_mir, name) = match target {
                     None => {
                         // fn() is either self.fn() or fn.call(), depends on if there is a name `fn`
@@ -243,7 +243,7 @@ impl Compiler {
                 mir::Node::Call(name, Box::new(target_mir), args_mir)
             },
 
-            ASTValue::If { condition, on_true, on_false } => {
+            ast::Value::If { condition, on_true, on_false } => {
                 let condition_mir = self.compile_ast(scope, *condition)?;
 
                 scope.push_block();
@@ -260,10 +260,10 @@ impl Compiler {
                 mir::Node::If(Box::new(condition_mir), Box::new(on_true_mir), on_false_mir)
             },
 
-            ASTValue::FnType { .. } => todo!("Support fn type definitions"),
-            ASTValue::TypeAssert { .. } => todo!("Support type asserts"),
+            ast::Value::FnType { .. } => todo!("Support fn type definitions"),
+            ast::Value::TypeAssert { .. } => todo!("Support type asserts"),
 
-            ASTValue::CompileTimeExpr(ast) => {
+            ast::Value::CompileTimeExpr(ast) => {
                 let export_ref = scope.define_comptime_export();
 
                 scope.push_comptime_portal();
@@ -291,7 +291,7 @@ impl Compiler {
         })
     }
 
-    fn access_name_mir(&mut self, scope: &mut ScopeStack, name: &str, location: Location) -> Result<mir::MIR, NameAccessError> {
+    fn access_name_mir(&mut self, scope: &mut ScopeStack, name: &str, location: ast::Location) -> Result<mir::MIR, NameAccessError> {
         let node = match scope.access_local(name) {
             Err(error) => return Err(error),
             Ok(AccessNameRef::ComptimeExport(export_ref, first_access)) => {

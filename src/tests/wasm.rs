@@ -4,7 +4,7 @@
 // use lib::{ValueT, ValueV};
 // // use crate::backend::wasm::WasmCompiler;
 // use crate::mir::ModuleCompiler;
-// use crate::frontend::{AST, Lexer, ParseError, Parser};
+// use crate::ast::{AST, Lexer, ParseError, Parser};
 //
 // #[test]
 // fn test_literals() {

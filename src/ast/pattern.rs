@@ -1,18 +1,18 @@
-use crate::frontend::{AST, Location};
+use crate::ast;
 
 #[derive(Debug)]
 pub struct Pattern {
     pub value: PatternValue,
-    pub location: Location
+    pub location: ast::Location
 }
 
 #[derive(Debug)]
 pub enum PatternValue {
-    SpecificValue(AST),
+    SpecificValue(ast::AST),
     Binding(Box<str>),
     Call {
         // may_be_var_call == this being None
-        target: Option<Box<AST>>,
+        target: Option<Box<ast::AST>>,
         name: Box<str>,
         args: Vec<Pattern>
     },
@@ -26,5 +26,5 @@ pub enum PatternValue {
 pub struct PatternParam {
     pub name: Box<str>,
     pub typ: Pattern,
-    pub location: Location
+    pub location: ast::Location
 }

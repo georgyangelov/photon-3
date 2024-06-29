@@ -4,7 +4,7 @@ mod location;
 mod ast;
 mod pattern;
 mod lookahead_token_iterator;
-mod inspect_ast;
+mod inspect;
 
 pub use lexer::*;
 pub use ast::*;

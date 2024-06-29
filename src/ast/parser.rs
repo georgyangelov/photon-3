@@ -1,8 +1,8 @@
 use std::mem::swap;
-use crate::frontend::*;
-use crate::frontend::lookahead_token_iterator::{LookaheadIteratorIterator, LookaheadTokenIterator};
-use crate::frontend::ParseError::UnexpectedPattern;
-use crate::frontend::TokenValue::*;
+use crate::ast::*;
+use crate::ast::lookahead_token_iterator::{LookaheadIteratorIterator, LookaheadTokenIterator};
+use crate::ast::ParseError::UnexpectedPattern;
+use crate::ast::TokenValue::*;
 
 #[derive(Debug)]
 pub enum ParseError {
@@ -65,7 +65,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             };
 
         Ok(AST {
-            value: ASTValue::Block(asts),
+            value: Value::Block(asts),
             location
         })
     }
@@ -118,7 +118,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
                 let location = left_ast.location.extend(&right.location);
 
                 ASTOrPattern::AST(AST {
-                    value: ASTValue::TypeAssert {
+                    value: Value::TypeAssert {
                         value: Box::new(left_ast),
                         typ: Box::new(right),
                     },
@@ -146,7 +146,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
                 let location = left_ast.location.extend(&right.location);
 
                 ASTOrPattern::AST(AST {
-                    value: ASTValue::Call {
+                    value: Value::Call {
                         target: Some(left_ast.into()),
                         name: method_name.into(),
                         args: [right].into()
@@ -245,14 +245,14 @@ impl <I: Iterator<Item = char>> Parser<I> {
                 let location = typ.location.clone();
 
                 AST {
-                    value: ASTValue::TypeAssert { value: Box::new(value_ast), typ: Box::new(typ) },
+                    value: Value::TypeAssert { value: Box::new(value_ast), typ: Box::new(typ) },
                     location
                 }
             }
         };
 
         return Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::Let {
+            value: Value::Let {
                 name,
                 value: Box::new(value_with_type),
                 recursive,
@@ -282,7 +282,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         } else { None };
 
         Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::If {
+            value: Value::If {
                 condition: Box::new(condition),
                 on_true: Box::new(on_true),
                 on_false: on_false.map(|ast| Box::new(ast))
@@ -347,7 +347,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         let expr = Self::assert_ast(expr)?;
 
         Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::CompileTimeExpr(Box::new(expr)),
+            value: Value::CompileTimeExpr(Box::new(expr)),
             location: start_loc.extend(&self.last_location)
         }))
     }
@@ -360,7 +360,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         };
 
         Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::Literal(ASTLiteral::Bool(value)),
+            value: Value::Literal(Literal::Bool(value)),
             location: t.location
         }))
     }
@@ -375,7 +375,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             .map_err(|_| ParseError::CouldNotParseNumber(t.location.clone()))?;
 
         Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::Literal(ASTLiteral::Int(value)),
+            value: Value::Literal(Literal::Int(value)),
             location: t.location
         }))
     }
@@ -390,7 +390,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             .map_err(|_| ParseError::CouldNotParseNumber(t.location.clone()))?;
 
         Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::Literal(ASTLiteral::Float(value)),
+            value: Value::Literal(Literal::Float(value)),
             location: t.location
         }))
     }
@@ -403,7 +403,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         };
 
         Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::Literal(ASTLiteral::String(value)),
+            value: Value::Literal(Literal::String(value)),
             location: t.location
         }))
     }
@@ -416,7 +416,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         };
 
         Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::NameRef(value),
+            value: Value::NameRef(value),
             location: t.location
         }))
     }
@@ -429,7 +429,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
         let location = start_loc.extend(&expression.location);
 
         return Ok(ASTOrPattern::AST(AST {
-            value: ASTValue::Call {
+            value: Value::Call {
                 target: Some(Box::new(expression)),
 
                 name: Self::unary_operator_method_name(&t.value)
@@ -476,7 +476,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             Ok(ASTOrPattern::AST(values.pop().unwrap()))
         } else {
             Ok(ASTOrPattern::AST(AST {
-                value: ASTValue::Block(values.into()),
+                value: Value::Block(values.into()),
                 location: start_location.extend(&t.location)
             }))
         }
@@ -497,12 +497,12 @@ impl <I: Iterator<Item = char>> Parser<I> {
 
         // name a
         // name(a)
-        if matches!(target, ASTOrPattern::AST(AST { value: ASTValue::NameRef(_), ..})) {
+        if matches!(target, ASTOrPattern::AST(AST { value: Value::NameRef(_), ..})) {
             let is_definitely_a_call = self.t.value == OpenParen;
 
             if !self.current_expression_may_end() && (!require_call_parens || is_definitely_a_call) {
                 let (name, name_location) = match target {
-                    ASTOrPattern::AST(AST { value: ASTValue::NameRef(name), location }) => (name, location),
+                    ASTOrPattern::AST(AST { value: Value::NameRef(name), location }) => (name, location),
                     _ => panic!("Should not happen - target was not an AST")
                 };
 
@@ -563,7 +563,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             }
 
             Ok(ASTOrPattern::AST(AST {
-                value: ASTValue::Call {
+                value: Value::Call {
                     target: target.map(Box::new),
                     name,
                     args: ast_args,
@@ -671,7 +671,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             };
 
             Ok(ASTOrPattern::AST(AST {
-                value: ASTValue::Function(ASTFunction {
+                value: Value::Function(Function {
                     params,
                     body: Box::new(body),
                     return_type
@@ -691,11 +691,11 @@ impl <I: Iterator<Item = char>> Parser<I> {
             let mut has_pattern_params = false;
             for param in &params {
                 match param {
-                    &ASTParam {
+                    &Param {
                         typ: Some(Pattern { value: PatternValue::SpecificValue(_), .. }),
                         ..
                     } => {},
-                    &ASTParam { typ: Some(_), .. } => has_pattern_params = true,
+                    &Param { typ: Some(_), .. } => has_pattern_params = true,
                     _ => return Err(ParseError::UnexpectedToken("Function types need to have explicit parameter types".into(), self.t.clone()))
                 }
             }
@@ -720,7 +720,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             } else {
                 let mut ast_params = Vec::with_capacity(params.len());
                 for it in params {
-                    ast_params.push(ASTTypeParam {
+                    ast_params.push(TypeParam {
                         name: it.name,
                         typ: match it.typ {
                             Some(Pattern { value: PatternValue::SpecificValue(ast), .. }) => ast,
@@ -734,14 +734,14 @@ impl <I: Iterator<Item = char>> Parser<I> {
 
                 // Function type, e.g. `(a: Int): Int`
                 Ok(ASTOrPattern::AST(AST {
-                    value: ASTValue::FnType { params: ast_params, return_type },
+                    value: Value::FnType { params: ast_params, return_type },
                     location
                 }))
             }
         }
     }
 
-    fn parse_lambda_params(&mut self) -> Result<Vec<ASTParam>, ParseError> {
+    fn parse_lambda_params(&mut self) -> Result<Vec<Param>, ParseError> {
         let mut params = Vec::new();
 
         self.read()?; // (
@@ -761,7 +761,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
                     None
                 };
 
-                params.push(ASTParam {
+                params.push(Param {
                     name,
                     typ,
                     location: name_location.extend(&self.last_location)
@@ -795,7 +795,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
             Ok(values.into_iter().next().unwrap())
         } else {
             Ok(AST {
-                value: ASTValue::Block(values),
+                value: Value::Block(values),
                 location: start_location.extend(&self.t.location)
             })
         }

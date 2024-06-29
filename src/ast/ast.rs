@@ -1,17 +1,17 @@
-use crate::frontend::{Location, Pattern};
+use crate::ast;
 
 #[derive(Debug)]
 pub struct AST {
-    pub value: ASTValue,
-    pub location: Location
+    pub value: Value,
+    pub location: ast::Location
 }
 
 #[derive(Debug)]
-pub enum ASTValue {
-    Literal(ASTLiteral),
+pub enum Value {
+    Literal(Literal),
     Block(Vec<AST>),
 
-    Function(ASTFunction),
+    Function(Function),
     Call {
         // may_be_var_call == this being None
         target: Option<Box<AST>>,
@@ -34,7 +34,7 @@ pub enum ASTValue {
     },
 
     FnType {
-        params: Vec<ASTTypeParam>,
+        params: Vec<TypeParam>,
         return_type: Box<AST>
     },
 
@@ -47,14 +47,14 @@ pub enum ASTValue {
 }
 
 #[derive(Debug)]
-pub struct ASTFunction {
-    pub params: Vec<ASTParam>,
+pub struct Function {
+    pub params: Vec<Param>,
     pub body: Box<AST>,
     pub return_type: Option<Box<AST>>
 }
 
 #[derive(Debug)]
-pub enum ASTLiteral {
+pub enum Literal {
     Int(i64),
     Bool(bool),
     Float(f64),
@@ -62,15 +62,15 @@ pub enum ASTLiteral {
 }
 
 #[derive(Debug)]
-pub struct ASTParam {
+pub struct Param {
     pub name: Box<str>,
-    pub typ: Option<Pattern>,
-    pub location: Location
+    pub typ: Option<ast::Pattern>,
+    pub location: ast::Location
 }
 
 #[derive(Debug)]
-pub struct ASTTypeParam {
+pub struct TypeParam {
     pub name: Box<str>,
     pub typ: AST,
-    pub location: Location
+    pub location: ast::Location
 }

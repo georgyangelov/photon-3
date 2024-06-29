@@ -1,5 +1,5 @@
-use crate::frontend::{Lexer, TokenValue};
-use crate::frontend::TokenValue::{DecimalLiteral, EOF, Equal, Name, Val};
+use crate::ast::{Lexer, TokenValue};
+use crate::ast::TokenValue::{DecimalLiteral, EOF, Equal, Name, Val};
 
 #[test]
 fn lexes_some_tokens() {

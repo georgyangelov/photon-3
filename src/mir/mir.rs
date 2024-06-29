@@ -1,5 +1,5 @@
 use crate::mir::lexical_scope::*;
-use crate::frontend::Location;
+use crate::ast;
 
 #[derive(Debug)]
 pub struct Module {
@@ -27,7 +27,7 @@ pub struct Function {
 pub struct MIR {
     pub node: Node,
     // pub typ: ComptimeExportRef,
-    pub location: Location
+    pub location: ast::Location
 }
 
 #[derive(Debug)]

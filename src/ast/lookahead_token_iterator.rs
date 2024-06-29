@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use crate::frontend::{Token, Lexer, LexerError};
+use crate::ast::{Token, Lexer, LexerError};
 
 pub struct LookaheadTokenIterator<I: Iterator<Item = char>> {
     pub lexer: Lexer<I>,

@@ -1,6 +1,6 @@
 use std::rc::Rc;
-use crate::frontend::location::{Location, Position};
-use crate::frontend::TokenValue::*;
+use crate::ast::location::{Location, Position};
+use crate::ast::TokenValue::*;
 
 #[derive(Debug, Clone)]
 pub struct Token {

@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
-use crate::frontend::{AST, ASTFunction, ASTLiteral, ASTValue, Pattern, PatternValue};
+use crate::ast::*;
 
 impl Display for AST {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -7,12 +7,12 @@ impl Display for AST {
     }
 }
 
-impl Display for ASTValue {
+impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ASTValue::Literal(value) => write!(f, "{}", value),
+            Value::Literal(value) => write!(f, "{}", value),
 
-            ASTValue::Block(values) => {
+            Value::Block(values) => {
                 if values.len() > 0 {
                     write!(f, "{{")?;
                     for ast in values {
@@ -24,7 +24,7 @@ impl Display for ASTValue {
                 }
             }
 
-            ASTValue::Function(ASTFunction { params, return_type, body }) => {
+            Value::Function(Function { params, return_type, body }) => {
                 write!(f, "(fn [")?;
 
                 for (i, param) in params.iter().enumerate() {
@@ -47,7 +47,7 @@ impl Display for ASTValue {
                 write!(f, " {})", body)
             }
 
-            ASTValue::Call { target, name, args } => {
+            Value::Call { target, name, args } => {
                 write!(f, "({}", name)?;
 
                 if let Some(target) = target {
@@ -63,7 +63,7 @@ impl Display for ASTValue {
                 write!(f, ")")
             }
 
-            ASTValue::Let { name, value, recursive, comptime } => {
+            Value::Let { name, value, recursive, comptime } => {
                 write!(f, "(")?;
 
                 if *comptime {
@@ -77,9 +77,9 @@ impl Display for ASTValue {
                 }
             }
 
-            ASTValue::NameRef(name) => write!(f, "{}", name),
+            Value::NameRef(name) => write!(f, "{}", name),
 
-            ASTValue::If { condition, on_true, on_false } => {
+            Value::If { condition, on_true, on_false } => {
                 write!(f, "(if {} {}", condition, on_true)?;
 
                 if let Some(on_false) = on_false {
@@ -89,7 +89,7 @@ impl Display for ASTValue {
                 write!(f, ")")
             },
 
-            ASTValue::FnType { params, return_type } => {
+            Value::FnType { params, return_type } => {
                 write!(f, "(fn-type [")?;
 
                 for (i, param) in params.iter().enumerate() {
@@ -103,20 +103,20 @@ impl Display for ASTValue {
                 write!(f, "] {})", return_type)
             }
 
-            ASTValue::TypeAssert { value, typ } => write!(f, "(type-assert {} {})", value, typ),
+            Value::TypeAssert { value, typ } => write!(f, "(type-assert {} {})", value, typ),
 
-            ASTValue::CompileTimeExpr(ast) => write!(f, "@{}", ast),
+            Value::CompileTimeExpr(ast) => write!(f, "@{}", ast),
         }
     }
 }
 
-impl Display for ASTLiteral {
+impl Display for Literal {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ASTLiteral::Int(value) => write!(f, "{}", value),
-            ASTLiteral::Bool(value) => write!(f, "{}", value),
-            ASTLiteral::Float(value) => write!(f, "{}", value),
-            ASTLiteral::String(value) => {
+            Literal::Int(value) => write!(f, "{}", value),
+            Literal::Bool(value) => write!(f, "{}", value),
+            Literal::Float(value) => write!(f, "{}", value),
+            Literal::String(value) => {
                 let escaped = value
                     .replace("\\", "\\\\")
                     .replace("\"", "\\\"")
