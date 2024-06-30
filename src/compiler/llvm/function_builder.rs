@@ -5,7 +5,7 @@ use llvm_sys::prelude::*;
 use lib::{Any, AnyT};
 use crate::compiler::llvm::{c_str, CompilerModuleContext};
 use crate::compiler::llvm::symbol_name_counter::SymbolNameCounter;
-use crate::mir::lexical_scope::{CaptureFrom, CaptureRef, ParamRef, StackFrameLocalRef};
+use crate::mir::lexical_scope::{CaptureFrom};
 use crate::mir;
 
 pub struct FunctionCompiler<'a> {
@@ -349,19 +349,19 @@ impl <'a> FunctionCompiler<'a> {
         LLVMBuildInsertValue(self.builder, value_ref, ptr_value_int_ref, 1, name.as_ptr())
     }
 
-    unsafe fn build_param_load(&mut self, param_ref: &ParamRef) -> LLVMValueRef {
+    unsafe fn build_param_load(&mut self, param_ref: &mir::ParamRef) -> LLVMValueRef {
         LLVMGetParam(self.func_ref, param_ref.i as c_uint)
     }
 
-    unsafe fn build_local_store(&mut self, local_ref: &StackFrameLocalRef, value_ref: LLVMValueRef) {
+    unsafe fn build_local_store(&mut self, local_ref: &mir::StackFrameLocalRef, value_ref: LLVMValueRef) {
         self.local_refs[local_ref.i] = Some(value_ref);
     }
 
-    unsafe fn build_local_load(&mut self, local_ref: &StackFrameLocalRef) -> LLVMValueRef {
+    unsafe fn build_local_load(&mut self, local_ref: &mir::StackFrameLocalRef) -> LLVMValueRef {
         self.local_refs[local_ref.i].expect("Local get before set")
     }
 
-    unsafe fn build_capture_load(&mut self, capture_ref: &CaptureRef) -> LLVMValueRef {
+    unsafe fn build_capture_load(&mut self, capture_ref: &mir::CaptureRef) -> LLVMValueRef {
         let mut indices = [self.const_i32(0), self.const_i32(capture_ref.i as i32 + 1)];
         let ptr = self.build_gep(
             self.capture_struct_type.unwrap(),

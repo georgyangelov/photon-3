@@ -3,7 +3,6 @@ use crate::ast;
 
 #[derive(Debug)]
 pub struct Module {
-    // TODO: Optimize away functions that are used only from comptime
     pub functions: Vec<Function>,
 
     pub comptime_export_count: usize,
@@ -66,7 +65,20 @@ pub struct FrameLayout {
     pub size: usize
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct FunctionRef {
-    pub i: usize
-}
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub struct FunctionRef { pub i: usize }
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct GlobalRef { pub i: usize }
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct ComptimeExportRef { pub i: usize }
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct StackFrameLocalRef { pub i: usize }
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct ParamRef { pub i: usize }
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+pub struct CaptureRef { pub i: usize }

@@ -1,3 +1,4 @@
+use crate::mir::ComptimeExportRef;
 use crate::mir::lexical_scope::*;
 
 pub struct RootScope {

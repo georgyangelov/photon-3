@@ -1,4 +1,5 @@
 use crate::mir::lexical_scope::*;
+use crate::mir::{CaptureRef, ComptimeExportRef, GlobalRef, ParamRef, StackFrameLocalRef};
 
 pub struct ScopeStack {
     stack: Vec<Scope>

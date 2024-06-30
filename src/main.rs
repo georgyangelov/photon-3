@@ -18,6 +18,8 @@ mod compiler;
 mod llvm_test;
 mod llvm_test_2;
 mod lir;
+mod types;
+mod lib;
 
 fn main() {
     unsafe { llvm_test() }

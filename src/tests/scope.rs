@@ -1,4 +1,5 @@
 use crate::mir::lexical_scope::*;
+use crate::mir::ParamRef;
 
 #[test]
 fn test_root_level_locals() {

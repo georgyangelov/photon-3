@@ -1,4 +1,5 @@
 use crate::mir::lexical_scope::*;
+use crate::mir::StackFrameLocalRef;
 
 /// The compile-time main function. There is only one such scope per-module and it executes the
 /// compile-time code.

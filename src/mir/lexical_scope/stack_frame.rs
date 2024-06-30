@@ -1,4 +1,5 @@
 use crate::mir::lexical_scope::*;
+use crate::mir::{CaptureRef, ParamRef, StackFrameLocalRef};
 
 /// A function/closure scope - it has locals and can reference variables from parent scopes by
 /// capturing them.

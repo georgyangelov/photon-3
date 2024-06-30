@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use crate::mir;
+use crate::types::Type;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -11,7 +12,7 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn assert_none(self) {
+    pub fn assert_none(&self) {
         match self {
             Value::None => {},
             _ => panic!("Invalid value: expected None, got {:?}", self)
@@ -43,6 +44,16 @@ impl Value {
         match self {
             Value::Closure(func_ref, value) => (*func_ref, value.as_ref()),
             _ => panic!("Invalid value: expected Closure, got {:?}", self)
+        }
+    }
+
+    pub fn type_of(&self) -> Type {
+        match self {
+            Value::None => Type::None,
+            Value::Bool(_) => Type::Bool,
+            Value::Int(_) => Type::Int,
+            Value::Float(_) => Type::Float,
+            Value::Closure(_, _) => todo!("Support types of closures")
         }
     }
 }
