@@ -214,7 +214,7 @@ impl Interpreter {
         }
 
         self.stack_offset += parent_frame_size;
-        self.current_frame_size = target_func.frame_layout.size;
+        self.current_frame_size = target_func.local_count;
     }
 
     #[inline]

@@ -2,6 +2,7 @@ use crate::mir;
 use crate::mir::lexical_scope::*;
 use crate::ast;
 use std::borrow::Borrow;
+use crate::ast::{AST, Pattern, PatternValue};
 
 #[derive(Debug)]
 pub enum CompileError {}
@@ -51,12 +52,12 @@ impl Compiler {
         let (root_scope, comptime_main_frame) = scope.consume_root();
 
         let comptime_main = mir::Function {
+            param_types: vec![],
+            return_type: None,
+
             body: mir::MIR {
                 node: mir::Node::Block(builder.compile_time_main),
                 location: module_location
-            },
-            frame_layout: mir::FrameLayout {
-                size: comptime_main_frame.locals.len()
             },
             param_count: 0,
             local_count: comptime_main_frame.locals.len(),
@@ -80,14 +81,29 @@ impl Compiler {
         scope: &mut ScopeStack,
         ast: ast::Function
     ) -> Result<mir::Function, CompileError> {
-        scope.push_stack_frame(ast.params.iter().map(|param| String::from(param.name.clone())).collect());
-        scope.push_block();
-
         let param_count = ast.params.len();
+        let mut param_names = Vec::with_capacity(param_count);
+        let mut param_types = Vec::with_capacity(param_count);
+        for param in ast.params {
+            param_names.push(String::from(param.name.clone()));
+            param_types.push(match param.typ {
+                None => None,
+                Some(Pattern { value: PatternValue::SpecificValue(ast), .. }) => {
+                    let export_ref = self.compile_comptime_expr(scope, ast)?;
 
-        // for param in ast.params {
-        //     scope.define_local(String::from(param.name));
-        // }
+                    Some(export_ref)
+                }
+                _ => todo!("Support patterns in arguments")
+            })
+        }
+
+        let return_type = match ast.return_type {
+            None => None,
+            Some(ast) => Some(self.compile_comptime_expr(scope, *ast)?)
+        };
+
+        scope.push_stack_frame(param_names);
+        scope.push_block();
 
         let body = self.compile_ast(scope, *ast.body)?;
 
@@ -95,11 +111,9 @@ impl Compiler {
         let stack_frame = scope.pop_stack_frame();
 
         Ok(mir::Function {
-            // TODO: Remove this frame_layout
-            frame_layout: mir::FrameLayout {
-                size: stack_frame.locals.len()
-            },
             param_count,
+            param_types,
+            return_type,
             local_count: stack_frame.locals.len(),
             captures: stack_frame.captures,
             body
@@ -265,22 +279,7 @@ impl Compiler {
             ast::Value::TypeAssert { .. } => todo!("Support type asserts"),
 
             ast::Value::CompileTimeExpr(ast) => {
-                let export_ref = scope.define_comptime_export();
-
-                scope.push_comptime_portal();
-                scope.push_block();
-
-                let mir = self.compile_ast(scope, *ast)?;
-
-                scope.pop_block();
-                scope.pop_comptime_portal();
-
-                let comptime_code = mir::Node::CompileTimeSet(export_ref, Box::new(mir));
-
-                self.compile_time_main.push(mir::MIR {
-                    node: comptime_code,
-                    location: location.clone()
-                });
+                let export_ref = self.compile_comptime_expr(scope, *ast)?;
 
                 mir::Node::CompileTimeGet(export_ref)
             }
@@ -290,6 +289,32 @@ impl Compiler {
             node,
             location
         })
+    }
+
+    fn compile_comptime_expr(
+        &mut self,
+        scope: &mut ScopeStack,
+        ast: ast::AST
+    ) -> Result<mir::ComptimeExportRef, CompileError> {
+        let location = ast.location.clone();
+        let export_ref = scope.define_comptime_export();
+
+        scope.push_comptime_portal();
+        scope.push_block();
+
+        let mir = self.compile_ast(scope, ast)?;
+
+        scope.pop_block();
+        scope.pop_comptime_portal();
+
+        let comptime_code = mir::Node::CompileTimeSet(export_ref, Box::new(mir));
+
+        self.compile_time_main.push(mir::MIR {
+            node: comptime_code,
+            location
+        });
+
+        Ok(export_ref)
     }
 
     fn access_name_mir(&mut self, scope: &mut ScopeStack, name: &str, location: ast::Location) -> Result<mir::MIR, NameAccessError> {

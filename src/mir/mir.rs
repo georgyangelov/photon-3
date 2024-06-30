@@ -13,19 +13,18 @@ pub struct Module {
 
 #[derive(Debug)]
 pub struct Function {
-    // pub param_types: Vec<ComptimeExportRef>,
-    pub frame_layout: FrameLayout,
     pub param_count: usize,
+    pub param_types: Vec<Option<ComptimeExportRef>>,
+    pub return_type: Option<ComptimeExportRef>,
+
     pub local_count: usize,
     pub captures: Vec<Capture>,
     pub body: MIR,
-    // pub return_type: ComptimeExportRef
 }
 
 #[derive(Debug)]
 pub struct MIR {
     pub node: Node,
-    // pub typ: ComptimeExportRef,
     pub location: ast::Location
 }
 
