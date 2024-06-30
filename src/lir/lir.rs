@@ -1,5 +1,5 @@
 use crate::lir::Value;
-use crate::types::Type;
+use crate::types::{IntrinsicFn, Type};
 
 pub struct Module {
     pub constants: Vec<Value>,
@@ -24,9 +24,13 @@ pub enum Instruction {
 
     LocalSet(LocalRef, ValueRef, Type),
 
-    CallStaticFunction(FunctionRef, Vec<ValueRef>, Type),
-    CallDynamicFunction(ValueRef, Vec<ValueRef>, Type),
-    CallClosureFunction(ValueRef, Vec<ValueRef>, Type),
+    // TODO: Type conversion operators
+    // TODO: Type assertion
+
+    CallIntrinsicFunction(LocalRef, IntrinsicFn, Vec<ValueRef>, Type),
+    // CallStaticFunction(LocalRef, FunctionRef, Vec<ValueRef>, Type),
+    // CallDynamicFunction(LocalRef, ValueRef, Vec<ValueRef>, Type),
+    // CallClosureFunction(LocalRef, ValueRef, Vec<ValueRef>, Type),
 
     Return(ValueRef, Type),
 

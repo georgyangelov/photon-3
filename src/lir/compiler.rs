@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use crate::mir;
 use crate::lir::*;
 use crate::lir::Instruction::Return;
-use crate::mir::ComptimeExportRef;
-use crate::types::Type;
+use crate::types::{IntrinsicLookup, Type};
 
 pub struct Compiler {
+    intrinsic_lookup: IntrinsicLookup,
+
     comptime_exports: Vec<Value>,
     constants: Vec<Value>,
 
@@ -33,6 +34,8 @@ struct FunctionBuilder {
 impl Compiler {
     pub fn compile(mir: &mir::Module, comptime_exports: Vec<Value>) -> Module {
         let mut compiler = Compiler {
+            intrinsic_lookup: IntrinsicLookup::new(),
+
             comptime_exports,
             constants: vec![],
 
@@ -143,8 +146,57 @@ impl Compiler {
                 (ValueRef::None, Type::None)
             }
 
-            mir::Node::Block(_) => todo!("Support blocks"),
-            mir::Node::Call(_, _, _) => todo!("Support function calls"),
+            mir::Node::Block(mirs) => {
+                let mut result = (ValueRef::None, Type::None);
+
+                for mir in mirs {
+                    result = self.compile_mir(builder, block, func, mir);
+                }
+
+                result
+            }
+
+            mir::Node::Call(name, target, args) => {
+                let (target_ref, target_type) = self.compile_mir(builder, block, func, target);
+
+                let mut arg_refs = Vec::with_capacity(args.len() + 1);
+                let mut arg_types = Vec::with_capacity(args.len() + 1);
+
+                arg_refs.push(target_ref);
+                arg_types.push(target_type);
+
+                for arg in args {
+                    let (arg_ref, arg_type) = self.compile_mir(builder, block, func, arg);
+
+                    arg_refs.push(arg_ref);
+                    arg_types.push(arg_type);
+                }
+
+                if target_type != Type::Any {
+                    // Concrete type, function can be determined statically
+                    // TODO: Template functions can't be determined statically
+                    // TODO: Support non-intrinsic functions
+                    let intrinsic = self.intrinsic_lookup.find(target_type, name);
+                    match intrinsic {
+                        None => panic!("Cannot find function {} on type {:?}", name, target_type),
+                        Some((intrinsic_fn, fn_type)) => {
+                            // TODO: Type-check the arguments
+                            // TODO: Insert conversion operators here, then call the function
+
+                            let result_type = fn_type.returns;
+                            let result_ref = new_temp_local(builder, fn_type.returns);
+
+                            let instruction = Instruction::CallIntrinsicFunction(result_ref, *intrinsic_fn, arg_refs, fn_type.returns);
+                            block.code.push(instruction);
+
+                            (ValueRef::Local(result_ref), result_type)
+                        }
+                    }
+                } else {
+                    todo!("Support dynamic function calls on Any")
+                }
+            }
+
             mir::Node::CreateClosure(_, _) => todo!("Support closures"),
             mir::Node::If(_, _, _) => todo!("Support ifs")
         }
@@ -162,7 +214,7 @@ impl Compiler {
         func_ref
     }
 
-    fn read_exported_type(&self, export: Option<ComptimeExportRef>) -> Type {
+    fn read_exported_type(&self, export: Option<mir::ComptimeExportRef>) -> Type {
         match export {
             // TODO: Verify that this Any is not present for runtime functions
             None => Type::Any,
@@ -177,4 +229,12 @@ impl Compiler {
             }
         }
     }
+}
+
+fn new_temp_local(builder: &mut FunctionBuilder, typ: Type) -> LocalRef {
+    let i = builder.local_types.len();
+
+    builder.local_types.push(typ);
+
+    LocalRef { i }
 }
