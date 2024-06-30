@@ -2,7 +2,6 @@ use crate::mir;
 use crate::mir::lexical_scope::*;
 use crate::ast;
 use std::borrow::Borrow;
-use crate::ast::{AST, Pattern, PatternValue};
 
 #[derive(Debug)]
 pub enum CompileError {}
@@ -14,9 +13,6 @@ struct FunctionTemplate {
 pub struct Compiler {
     pub const_strings: Vec<Box<str>>,
 
-    // pub compile_time_slots: Vec<Any>,
-    // pub compile_time_functions: Vec<lir::Function>,
-    // pub compile_time_scope: BlockScope<'a>,
     pub compile_time_main: Vec<mir::MIR>,
 
     pub functions: Vec<mir::Function>
@@ -65,8 +61,6 @@ impl Compiler {
         };
 
         Ok(mir::Module {
-            // compile_time_functions: builder.compile_time_functions,
-            // run_time_functions: builder.run_time_functions
             functions: builder.functions,
 
             comptime_export_count: root_scope.comptime_exports.len(),
@@ -88,7 +82,7 @@ impl Compiler {
             param_names.push(String::from(param.name.clone()));
             param_types.push(match param.typ {
                 None => None,
-                Some(Pattern { value: PatternValue::SpecificValue(ast), .. }) => {
+                Some(ast::Pattern { value: ast::PatternValue::SpecificValue(ast), .. }) => {
                     let export_ref = self.compile_comptime_expr(scope, ast)?;
 
                     Some(export_ref)
