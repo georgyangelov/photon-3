@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use crate::mir;
 use crate::lir::*;
+use crate::lir::Instruction::Return;
+use crate::mir::ComptimeExportRef;
 use crate::types::Type;
 
 pub struct Compiler {
@@ -58,21 +60,37 @@ impl Compiler {
     }
 
     fn compile_function(&mut self, func: &mir::Function) -> Function {
+        let mut param_types = Vec::with_capacity(func.param_types.len());
+        for param_type in &func.param_types {
+            param_types.push(self.read_exported_type(*param_type));
+        }
+
+        let return_type = self.read_exported_type(func.return_type);
+
+        let mut local_types = Vec::with_capacity(func.local_count);
+        local_types.resize(func.local_count, Type::None);
+
+        let mut builder = FunctionBuilder {
+            param_types,
+            return_type,
+            local_types,
+        };
+
         let mut entry = BasicBlock {
             code: Vec::new()
         };
 
-        // let param_types = func.
+        let (value_ref, typ) = self.compile_mir(&mut builder, &mut entry, func, &func.body);
 
-        let mut builder = FunctionBuilder {
-            param_types: todo!(),
-            local_types: todo!(),
-            return_type: todo!()
-        };
+        // TODO: Type-check the type with builder.return_type
+        entry.code.push(Return(value_ref, typ));
 
-        self.compile_mir(&mut builder, &mut entry, func, &func.body);
-
-        Function { entry }
+        Function {
+            param_types: builder.param_types,
+            return_type: builder.return_type,
+            local_types: builder.local_types,
+            entry
+        }
     }
 
     fn compile_mir(
@@ -109,14 +127,16 @@ impl Compiler {
             mir::Node::LiteralBool(value) => (ValueRef::Bool(*value), Type::Bool),
             mir::Node::LiteralI64(value) => (ValueRef::Int(*value), Type::Int),
             mir::Node::LiteralF64(value) => (ValueRef::Float(*value), Type::Float),
-            mir::Node::ParamRef(param_ref) => (ValueRef::Param(ParamRef { i: param_ref.i }), todo!("Get param type")),
+            mir::Node::ParamRef(param_ref) => (ValueRef::Param(ParamRef { i: param_ref.i }), builder.param_types[param_ref.i]),
 
             mir::Node::CaptureRef(_) => todo!("Support capture struct"),
 
-            mir::Node::LocalGet(local_ref) => (ValueRef::Local(LocalRef { i: local_ref.i }), todo!("Infer local types")),
+            mir::Node::LocalGet(local_ref) => (ValueRef::Local(LocalRef { i: local_ref.i }), builder.local_types[local_ref.i]),
             mir::Node::LocalSet(local_ref, mir) => {
                 let local_ref = LocalRef { i: local_ref.i };
                 let (value_ref, typ) = self.compile_mir(builder, block, func, mir);
+
+                builder.local_types[local_ref.i] = typ;
 
                 block.code.push(Instruction::LocalSet(local_ref, value_ref, typ));
 
@@ -140,5 +160,21 @@ impl Compiler {
 
         self.functions[func_ref.i] = CompilingFunction::Compiled(func);
         func_ref
+    }
+
+    fn read_exported_type(&self, export: Option<ComptimeExportRef>) -> Type {
+        match export {
+            // TODO: Verify that this Any is not present for runtime functions
+            None => Type::Any,
+            Some(export_ref) => {
+                let value = &self.comptime_exports[export_ref.i];
+
+                match value {
+                    Value::Type(typ) => *typ,
+                    // TODO: Location
+                    _ => panic!("Invalid value specified as a type, got {:?}", value)
+                }
+            }
+        }
     }
 }

@@ -1,10 +1,11 @@
-use crate::{ast, lir, mir};
-use crate::compiler::llvm;
-use crate::lir::Value;
+use lib::Any;
+use crate::old_compiler::llvm::LLVMJITCompiler;
+use crate::mir::Compiler;
+use crate::ast;
 
 #[test]
 fn test_literals() {
-    assert_eq!(run("42"), Value::Int(42))
+    assert_eq!(run("42"), Any::int(42))
 }
 
 #[test]
@@ -14,7 +15,7 @@ fn test_locals() {
         val b = 11
 
         a
-    "), Value::Int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -24,7 +25,7 @@ fn test_add() {
         val b = 1
 
         a + b
-    "), Value::Int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -33,7 +34,7 @@ fn test_fns() {
         val add = (a, b) a + b
 
         add(1, 41)
-    "), Value::Int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -43,7 +44,7 @@ fn test_local_captures() {
         val add = (b) a + b
 
         add(1)
-    "), Value::Int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -52,7 +53,7 @@ fn test_param_captures() {
         val add = (a) (b) a + b
 
         add(1)(41)
-    "), Value::Int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -64,7 +65,7 @@ fn test_capture_captures() {
         }
 
         add()(1)
-    "), Value::Int(42));
+    "), Any::int(42));
 }
 
 #[test]
@@ -73,14 +74,14 @@ fn test_comptime_vals() {
         @val a = 41
 
         a + 1
-    "), Value::Int(42))
+    "), Any::int(42))
 }
 
 #[test]
 fn test_comptime_exprs() {
     assert_eq!(run("
         1 + @(1 + 40)
-    "), Value::Int(42))
+    "), Any::int(42))
 }
 
 #[test]
@@ -89,18 +90,37 @@ fn test_using_comptime_vals_in_comptime_exprs() {
         @val a = 40
 
         1 + @(1 + a)
-    "), Value::Int(42))
+    "), Any::int(42))
 }
 
-fn run(code: &str) -> Value {
+fn run(code: &str) -> Any {
     let ast = parse(code).expect("Could not parse");
-    let mir_module = mir::Compiler::compile_module(ast).expect("Could not compile");
+    let module = Compiler::compile_module(ast).expect("Could not compile");
 
-    let comptime_result = lir::Interpreter::eval_comptime(&mir_module);
-    let lir_module = lir::Compiler::compile(&mir_module, comptime_result.exports);
-    let mut jit_compiler = llvm::JITCompiler::new(&lir_module);
+    let mut comptime_jit = LLVMJITCompiler::new(&module, true);
+    let mut runtime_jit = LLVMJITCompiler::new(&module, false);
 
-    let main_fn = jit_compiler.compile();
+    let (_, comptime_exports) = run_comptime(&mut comptime_jit);
+    let runtime_result = run_runtime(&mut runtime_jit, comptime_exports);
+
+    runtime_result
+}
+
+fn run_comptime<'a>(jit: &'a mut LLVMJITCompiler) -> (Any, Vec<&'a Any>) {
+    let main_fn = jit.compile();
+
+    let result = unsafe { main_fn() };
+    let exports = jit.comptime_exports();
+
+    println!("Comptime exports: {:?}", exports);
+
+    (result, exports)
+}
+
+fn run_runtime(jit: &mut LLVMJITCompiler, comptime_exports: Vec<&Any>) -> Any {
+    jit.set_comptime_exports(comptime_exports);
+
+    let main_fn = jit.compile();
 
     let result = unsafe { main_fn() };
 

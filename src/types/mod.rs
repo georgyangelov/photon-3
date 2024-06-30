@@ -1,10 +1,11 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Type {
     Any,
     None,
     Bool,
     Int,
     Float,
+    Type,
 
     // TODO
     // Struct(ArenaRef<StructType>),

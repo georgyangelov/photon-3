@@ -8,6 +8,9 @@ pub struct Module {
 }
 
 pub struct Function {
+    pub param_types: Vec<Type>,
+    pub return_type: Type,
+    pub local_types: Vec<Type>,
     pub entry: BasicBlock
 }
 

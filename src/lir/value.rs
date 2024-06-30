@@ -2,12 +2,13 @@ use std::rc::Rc;
 use crate::mir;
 use crate::types::Type;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     None,
     Bool(bool),
     Int(i64),
     Float(f64),
+    Type(Type),
     Closure(mir::FunctionRef, Rc<Vec<Value>>)
 }
 
@@ -40,6 +41,13 @@ impl Value {
         }
     }
 
+    pub fn assert_type(&self) -> Type {
+        match self {
+            Value::Type(value) => *value,
+            _ => panic!("Invalid value: expected Type got {:?}", self)
+        }
+    }
+
     pub fn assert_closure(&self) -> (mir::FunctionRef, &Vec<Value>) {
         match self {
             Value::Closure(func_ref, value) => (*func_ref, value.as_ref()),
@@ -53,7 +61,8 @@ impl Value {
             Value::Bool(_) => Type::Bool,
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
-            Value::Closure(_, _) => todo!("Support types of closures")
+            Value::Type(_) => Type::Type,
+            Value::Closure(_, _) => todo!("Support types of closures"),
         }
     }
 }

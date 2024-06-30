@@ -20,7 +20,7 @@ pub struct ComptimeEvalResult {
 
 impl Interpreter {
     // TODO: Actual error handling instead of panics
-    pub fn eval_comptime(mir_module: mir::Module) -> ComptimeEvalResult {
+    pub fn eval_comptime(mir_module: &mir::Module) -> ComptimeEvalResult {
         let stack = Vec::new();
         let exports = empty_vec(mir_module.comptime_export_count);
 

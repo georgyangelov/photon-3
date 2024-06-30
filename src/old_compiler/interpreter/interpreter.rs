@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use crate::mir;
-use crate::compiler::interpreter::{Closure, Value};
+use crate::old_compiler::interpreter::{Closure, Value};
 use std::borrow::Borrow;
 use crate::mir::{CaptureRef, ParamRef, StackFrameLocalRef};
 use crate::mir::lexical_scope::{CaptureFrom};
