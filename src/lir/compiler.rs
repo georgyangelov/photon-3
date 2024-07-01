@@ -7,17 +7,13 @@ use crate::types::{IntrinsicLookup, Type};
 pub struct Compiler {
     intrinsic_lookup: IntrinsicLookup,
 
-    comptime_exports: Vec<Value>,
-    constants: Vec<Value>,
-
     // TODO: Maybe use arenas for these functions?
     functions: Vec<CompilingFunction>,
 
     // struct_types: Arena<Type>,
     // interface_types: Arena<Type>
 
-    func_map: HashMap<mir::FunctionRef, FunctionRef>,
-    export_map: HashMap<mir::ComptimeExportRef, ConstRef>
+    func_map: HashMap<mir::FunctionRef, FunctionRef>
 }
 
 enum CompilingFunction {
@@ -25,27 +21,26 @@ enum CompilingFunction {
     Compiled(Function)
 }
 
-struct FunctionBuilder {
+struct FunctionBuilder<'a> {
+    comptime_exports: &'a [Value],
     param_types: Vec<Type>,
     local_types: Vec<Type>,
     return_type: Type
 }
 
 impl Compiler {
-    pub fn compile(mir: &mir::Module, comptime_exports: Vec<Value>) -> Module {
-        let mut compiler = Compiler {
+    pub fn new() -> Self {
+        Self {
             intrinsic_lookup: IntrinsicLookup::new(),
-
-            comptime_exports,
-            constants: vec![],
-
             functions: Vec::new(),
+            func_map: HashMap::new()
+        }
+    }
 
-            func_map: HashMap::new(),
-            export_map: HashMap::new(),
-        };
+    pub fn compile(mir: &mir::Module, comptime_exports: Vec<Value>) -> Module {
+        let mut compiler = Self::new();
 
-        let main = compiler.compile_function(&mir.runtime_main);
+        let main = compiler.compile_function_mir(&mir.runtime_main, &comptime_exports);
 
         let mut functions = Vec::with_capacity(compiler.functions.len());
         for func in compiler.functions {
@@ -56,24 +51,47 @@ impl Compiler {
         }
 
         Module {
-            constants: compiler.constants,
+            // TODO: Build only the used ones
+            comptime_exports,
             functions,
             main
         }
     }
 
-    fn compile_function(&mut self, func: &mir::Function) -> Function {
+    pub fn compile_main(&mut self, func: &mir::Function, comptime_exports: &Vec<Value>) -> Function {
+        self.compile_function_mir(func, comptime_exports)
+    }
+
+    pub fn compile_function(
+        &mut self,
+        mir_ref: mir::FunctionRef,
+        func: &mir::Function,
+        comptime_exports: &Vec<Value>
+    ) -> FunctionRef {
+        let func_ref = FunctionRef { i: self.functions.len() };
+
+        self.func_map.insert(mir_ref, func_ref);
+        self.functions.push(CompilingFunction::Pending);
+
+        let func = self.compile_function_mir(func, comptime_exports);
+
+        self.functions[func_ref.i] = CompilingFunction::Compiled(func);
+        func_ref
+    }
+
+    fn compile_function_mir(&mut self, func: &mir::Function, comptime_exports: &Vec<Value>) -> Function {
         let mut param_types = Vec::with_capacity(func.param_types.len());
         for param_type in &func.param_types {
-            param_types.push(self.read_exported_type(*param_type));
+            param_types.push(self.read_exported_type(*param_type, comptime_exports));
         }
 
-        let return_type = self.read_exported_type(func.return_type);
+        let return_type = self.read_exported_type(func.return_type, comptime_exports);
 
         let mut local_types = Vec::with_capacity(func.local_count);
         local_types.resize(func.local_count, Type::None);
 
         let mut builder = FunctionBuilder {
+            comptime_exports,
             param_types,
             return_type,
             local_types,
@@ -106,24 +124,33 @@ impl Compiler {
         match &mir.node {
             mir::Node::Nop => (ValueRef::None, Type::None),
             mir::Node::CompileTimeGet(export_ref) => {
-                let const_ref = if self.export_map.contains_key(export_ref) {
-                    self.export_map[export_ref]
-                } else {
-                    let const_ref = ConstRef { i: self.constants.len() };
-
-                    // TODO: Verify value is serializable
-                    self.constants.push(self.comptime_exports[export_ref.i].clone());
-                    self.export_map.insert(*export_ref, const_ref);
-
-                    const_ref
-                };
-
-                let value = &self.constants[const_ref.i];
-
-                (ValueRef::Const(const_ref), value.type_of())
+                // TODO: Can the type of this be inferred on the CompileTimeSet node?
+                (ValueRef::ComptimeExport(*export_ref), Type::Any)
+                // let export_ref = if self.export_map.contains_key(export_ref) {
+                //     self.export_map[export_ref]
+                // } else {
+                //     let const_ref = ComptimeExportRef { i: self.constants.len() };
+                //
+                //     // TODO: Verify value is serializable
+                //     self.constants.push(builder.comptime_exports[export_ref.i].clone());
+                //     self.export_map.insert(*export_ref, const_ref);
+                //
+                //     const_ref
+                // };
+                //
+                // let value = &self.constants[export_ref.i];
+                //
+                // (ValueRef::ComptimeExport(export_ref), value.type_of())
             }
 
-            mir::Node::CompileTimeSet(_, _) => panic!("Cannot have CompileTimeSet instructions in runtime code"),
+            mir::Node::CompileTimeSet(export_ref, mir) => {
+                let (value_ref, value_type) = self.compile_mir(builder, block, func, mir);
+
+                let instr = Instruction::CompileTimeSet(*export_ref, value_ref, value_type);
+                block.code.push(instr);
+
+                (ValueRef::None, Type::None)
+            },
 
             mir::Node::GlobalRef(_) => todo!("Support GlobalRef"),
             mir::Node::ConstStringRef(_) => todo!("Support ConstStringRef"),
@@ -202,24 +229,12 @@ impl Compiler {
         }
     }
 
-    fn compile_and_add_function(&mut self, mir_ref: mir::FunctionRef, func: &mir::Function) -> FunctionRef {
-        let func_ref = FunctionRef { i: self.functions.len() };
-
-        self.func_map.insert(mir_ref, func_ref);
-        self.functions.push(CompilingFunction::Pending);
-
-        let func = self.compile_function(func);
-
-        self.functions[func_ref.i] = CompilingFunction::Compiled(func);
-        func_ref
-    }
-
-    fn read_exported_type(&self, export: Option<mir::ComptimeExportRef>) -> Type {
+    fn read_exported_type(&self, export: Option<mir::ComptimeExportRef>, comptime_exports: &Vec<Value>) -> Type {
         match export {
             // TODO: Verify that this Any is not present for runtime functions
             None => Type::Any,
             Some(export_ref) => {
-                let value = &self.comptime_exports[export_ref.i];
+                let value = &comptime_exports[export_ref.i];
 
                 match value {
                     Value::Type(typ) => *typ,

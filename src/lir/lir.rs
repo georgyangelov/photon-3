@@ -1,8 +1,9 @@
 use crate::lir::Value;
+use crate::mir;
 use crate::types::{IntrinsicFn, Type};
 
 pub struct Module {
-    pub constants: Vec<Value>,
+    pub comptime_exports: Vec<Value>,
     pub functions: Vec<Function>,
     pub main: Function,
 }
@@ -19,10 +20,11 @@ pub struct BasicBlock {
 }
 
 pub enum Instruction {
-    ParamGet(ParamRef, Type),
-    LocalGet(LocalRef, Type),
+    // ParamGet(ParamRef, Type),
+    // LocalGet(LocalRef, Type),
 
     LocalSet(LocalRef, ValueRef, Type),
+    CompileTimeSet(mir::ComptimeExportRef, ValueRef, Type),
 
     // TODO: Type conversion operators
     // TODO: Type assertion
@@ -37,19 +39,16 @@ pub enum Instruction {
     If(ValueRef, BasicBlock, BasicBlock, Type)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum ValueRef {
     None,
     Bool(bool),
     Int(i64),
     Float(f64),
-    Const(ConstRef),
+    ComptimeExport(mir::ComptimeExportRef),
     Param(ParamRef),
     Local(LocalRef)
 }
-
-#[derive(Clone, Copy)]
-pub struct ConstRef { pub i: usize }
 
 #[derive(Clone, Copy)]
 pub struct ParamRef { pub i: usize }

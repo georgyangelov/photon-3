@@ -1,155 +1,109 @@
-use std::rc::Rc;
-use crate::mir;
-use crate::lir::*;
-use crate::mir::lexical_scope::CaptureFrom;
+use crate::lir::{Function, Instruction, Value, ValueRef};
+use crate::{lir, mir};
+use crate::types::IntrinsicFn;
 
-pub struct Interpreter {
-    stack: Vec<StackFrame>,
-    exports: Vec<Value>
+pub struct CompileTimeInterpreter<'a> {
+    comptime_exports: Vec<Value>,
+    lir_compiler: lir::Compiler,
+
+    mir_module: &'a mir::Module
+
+    // TODO: Optimize so that all values are part of the same Vec -> data locality
+    // stack: Vec<StackFrame>
 }
 
-struct StackFrame {
-    captures: Vec<Value>,
+struct StackFrame<'a> {
+    func: &'a Function,
+    // globals: Vec<Value>,
     args: Vec<Value>,
     locals: Vec<Value>
 }
 
-pub struct ComptimeEvalResult {
-    pub exports: Vec<Value>
-}
+impl <'a> CompileTimeInterpreter<'a> {
+    pub fn new(mir_module: &'a mir::Module) -> Self {
+        let mut comptime_exports = Vec::new();
 
-impl Interpreter {
-    // TODO: Actual error handling instead of panics
-    pub fn eval_comptime(mir_module: &mir::Module) -> ComptimeEvalResult {
-        let stack = Vec::new();
-        let exports = empty_vec(mir_module.comptime_export_count);
+        // TODO: Make sure exports are not used before being defined
+        comptime_exports.resize(mir_module.comptime_export_count, Value::None);
 
-        let mut interpreter = Interpreter { stack, exports };
+        let lir_compiler = lir::Compiler::new();
 
-        interpreter.call_function(&mir_module, &mir_module.comptime_main, vec![], vec![]);
-
-        ComptimeEvalResult { exports: interpreter.exports }
+        Self {
+            comptime_exports,
+            lir_compiler,
+            mir_module
+        }
     }
 
-    fn call_function(
+    pub fn eval(mut self) -> Vec<Value> {
+        let main_mir = &self.mir_module.comptime_main;
+        let main_lir = self.lir_compiler.compile_main(main_mir, &self.comptime_exports);
+
+        self.eval_func(&main_lir, Vec::new());
+
+        self.comptime_exports
+    }
+
+    fn eval_func(&mut self, func: &Function, args: Vec<Value>) -> Value {
+        let mut locals = Vec::new();
+        locals.resize(func.local_types.len(), Value::None);
+        let mut frame = StackFrame { func, args, locals };
+
+        self.eval_basic_block(&mut frame, &func.entry)
+    }
+
+    fn eval_basic_block(
         &mut self,
-        module: &mir::Module,
-        func: &mir::Function,
-        captures: Vec<Value>,
-        args: Vec<Value>
+        frame: &mut StackFrame,
+        block: &lir::BasicBlock
     ) -> Value {
-        self.stack.push(StackFrame {
-            locals: empty_vec(func.local_count),
-            args,
-            captures
-        });
+        for instruction in &block.code {
+            // TODO: Insert type assertions on LIR compilation if the value transitions
+            //       from Any to a concrete type
+            match instruction {
+                Instruction::LocalSet(local_ref, value_ref, _) => {
+                    frame.locals[local_ref.i] = self.resolve_value(frame, *value_ref);
+                }
 
-        let result = self.eval(module, &func.body);
+                Instruction::CompileTimeSet(export_ref, value_ref, _) => {
+                    self.comptime_exports[export_ref.i] = self.resolve_value(frame, *value_ref);
+                }
 
-        self.stack.pop();
+                Instruction::CallIntrinsicFunction(result_local_ref, intrinsic_fn, arg_refs, _) => {
+                    let mut args = Vec::with_capacity(arg_refs.len());
+                    for arg_ref in arg_refs {
+                        let value = self.resolve_value(frame, *arg_ref);
 
-        result
+                        args.push(value);
+                    }
+
+                    let result = match intrinsic_fn {
+                        IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int())
+                    };
+
+                    frame.locals[result_local_ref.i] = result;
+                }
+
+                Instruction::Return(value_ref, _) => {
+                    return self.resolve_value(frame, *value_ref);
+                }
+
+                Instruction::If(_, _, _, _) => {}
+            };
+        }
+
+        Value::None
     }
 
-    fn eval(&mut self, module: &mir::Module, mir: &mir::MIR) -> Value {
-        match &mir.node {
-            mir::Node::Nop => Value::None,
-
-            mir::Node::CompileTimeGet(export_ref) => self.exports[export_ref.i].clone(),
-            mir::Node::CompileTimeSet(export_ref, mir) => {
-                let value = self.eval(module, mir);
-
-                self.exports[export_ref.i] = value;
-
-                Value::None
-            }
-
-            mir::Node::GlobalRef(_) => todo!("Support GlobalRef"),
-
-            mir::Node::ConstStringRef(_) => todo!("Support ConstStringRef"),
-
-            mir::Node::LiteralBool(value) => Value::Bool(*value),
-            mir::Node::LiteralI64(value) => Value::Int(*value),
-            mir::Node::LiteralF64(value) => Value::Float(*value),
-
-            mir::Node::ParamRef(param_ref) => self.current_frame().args[param_ref.i].clone(),
-            mir::Node::CaptureRef(capture_ref) => self.current_frame().captures[capture_ref.i].clone(),
-
-            mir::Node::LocalGet(local_ref) => self.current_frame().locals[local_ref.i].clone(),
-            mir::Node::LocalSet(local_ref, mir) => {
-                let value = self.eval(module, mir);
-
-                self.current_frame().locals[local_ref.i] = value;
-
-                Value::None
-            }
-
-            mir::Node::Block(mirs) => {
-                let mut result = Value::None;
-
-                for mir in mirs {
-                    result = self.eval(module, mir);
-                }
-
-                result
-            }
-
-            mir::Node::Call(name, target, args) => {
-                let target_value = self.eval(module, target);
-                let mut arg_values = Vec::with_capacity(args.len());
-                for arg in args {
-                    let value = self.eval(module, arg);
-                    arg_values.push(value);
-                }
-
-                self.call(module, &name, target_value, arg_values)
-            }
-
-            mir::Node::CreateClosure(func_ref, captures) => {
-                let mut capture_values = Vec::with_capacity(captures.len());
-                for capture in captures {
-                    let frame = self.current_frame();
-
-                    capture_values.push(match capture {
-                        CaptureFrom::Capture(capture_ref) => frame.captures[capture_ref.i].clone(),
-                        CaptureFrom::Param(param_ref) => frame.args[param_ref.i].clone(),
-                        CaptureFrom::Local(local_ref) => frame.locals[local_ref.i].clone()
-                    });
-                }
-
-                let captures = Rc::new(capture_values);
-
-                Value::Closure(*func_ref, captures)
-            }
-
-            mir::Node::If(_, _, _) => todo!("Support if")
+    fn resolve_value(&self, frame: &StackFrame, value_ref: ValueRef) -> Value {
+        match value_ref {
+            ValueRef::None => Value::None,
+            ValueRef::Bool(value) => Value::Bool(value),
+            ValueRef::Int(value) => Value::Int(value),
+            ValueRef::Float(value) => Value::Float(value),
+            ValueRef::ComptimeExport(export_ref) => self.comptime_exports[export_ref.i].clone(),
+            ValueRef::Param(param_ref) => frame.args[param_ref.i].clone(),
+            ValueRef::Local(local_ref) => frame.locals[local_ref.i].clone()
         }
     }
-
-    fn call(&mut self, module: &mir::Module, name: &str, target: Value, args: Vec<Value>) -> Value {
-        println!("name: {:?}", name);
-        println!("args: {:?}", args);
-
-        if name == "+" {
-            Value::Int(target.assert_int() + args[0].assert_int())
-        } else if name == "call" {
-            let (func_ref, captures) = target.assert_closure();
-
-            self.call_function(module, &module.functions[func_ref.i], captures.clone(), args)
-        } else {
-            panic!("Unknown function {}", name)
-        }
-    }
-
-    fn current_frame(&mut self) -> &mut StackFrame {
-        let i = self.stack.len() - 1;
-
-        &mut self.stack[i]
-    }
-}
-
-fn empty_vec(size: usize) -> Vec<Value> {
-    let mut result = Vec::with_capacity(size);
-    result.resize(size, Value::None);
-    result
 }
