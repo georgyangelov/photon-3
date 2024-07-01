@@ -133,13 +133,27 @@ impl <'a> FunctionCompiler<'a> {
 
     unsafe fn llvm_value_ref_of(&mut self, lir_value_ref: lir::ValueRef) -> LLVMValueRef {
         match lir_value_ref {
-            lir::ValueRef::None => self.const_u8(0),
-            lir::ValueRef::Bool(value) => self.const_u8(if value { 1 } else { 0 }),
-            lir::ValueRef::Int(value) => self.const_i64(value),
+            lir::ValueRef::None => self.const_lir_value(&lir::Value::None),
+            lir::ValueRef::Bool(value) => self.const_lir_value(&lir::Value::Bool(value)),
+            lir::ValueRef::Int(value) => self.const_lir_value(&lir::Value::Int(value)),
             lir::ValueRef::Float(_) => todo!("Support float consts"),
             lir::ValueRef::ComptimeExport(_) => todo!("Support comptime exports"),
+            lir::ValueRef::Const(const_ref) => self.const_lir_value(&self.lir_module.constants[const_ref.i]),
             lir::ValueRef::Param(param_ref) => LLVMGetParam(self.func_ref, param_ref.i as c_uint),
             lir::ValueRef::Local(local_ref) => self.local_refs[local_ref.i].expect("Local get before set")
+        }
+    }
+
+    unsafe fn const_lir_value(&self, lir_value: &lir::Value) -> LLVMValueRef {
+        match lir_value {
+            lir::Value::None => self.const_u8(0),
+            lir::Value::Bool(value) => self.const_u8(if *value { 1 } else { 0 }),
+            lir::Value::Int(value) => self.const_i64(*value),
+            lir::Value::Float(_) => todo!("Support float consts"),
+
+            // TODO: Type error instead of panic
+            lir::Value::Type(_) => panic!("Cannot export Type to runtime as it's not serializable"),
+            lir::Value::Closure(_, _) => todo!("Serialize closure")
         }
     }
 

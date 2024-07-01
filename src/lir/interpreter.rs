@@ -26,7 +26,7 @@ impl <'a> CompileTimeInterpreter<'a> {
         // TODO: Make sure exports are not used before being defined
         comptime_exports.resize(mir_module.comptime_export_count, Value::None);
 
-        let lir_compiler = lir::Compiler::new();
+        let lir_compiler = lir::Compiler::new(false);
 
         Self {
             comptime_exports,
@@ -102,8 +102,9 @@ impl <'a> CompileTimeInterpreter<'a> {
             ValueRef::Int(value) => Value::Int(value),
             ValueRef::Float(value) => Value::Float(value),
             ValueRef::ComptimeExport(export_ref) => self.comptime_exports[export_ref.i].clone(),
+            ValueRef::Const(_) => todo!("Constants in interpreter"),
             ValueRef::Param(param_ref) => frame.args[param_ref.i].clone(),
-            ValueRef::Local(local_ref) => frame.locals[local_ref.i].clone()
+            ValueRef::Local(local_ref) => frame.locals[local_ref.i].clone(),
         }
     }
 }

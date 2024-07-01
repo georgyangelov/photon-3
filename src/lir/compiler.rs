@@ -5,7 +5,11 @@ use crate::lir::Instruction::Return;
 use crate::types::{IntrinsicLookup, Type};
 
 pub struct Compiler {
+    exports_are_constants: bool,
+
     intrinsic_lookup: IntrinsicLookup,
+
+    constants: Vec<Value>,
 
     // TODO: Maybe use arenas for these functions?
     functions: Vec<CompilingFunction>,
@@ -13,7 +17,8 @@ pub struct Compiler {
     // struct_types: Arena<Type>,
     // interface_types: Arena<Type>
 
-    func_map: HashMap<mir::FunctionRef, FunctionRef>
+    func_map: HashMap<mir::FunctionRef, FunctionRef>,
+    export_const_map: HashMap<mir::ComptimeExportRef, ConstRef>
 }
 
 enum CompilingFunction {
@@ -28,16 +33,19 @@ struct FunctionBuilder<'a> {
 }
 
 impl Compiler {
-    pub fn new() -> Self {
+    pub fn new(exports_are_constants: bool) -> Self {
         Self {
+            exports_are_constants,
             intrinsic_lookup: IntrinsicLookup::new(),
+            constants: Vec::new(),
             functions: Vec::new(),
-            func_map: HashMap::new()
+            func_map: HashMap::new(),
+            export_const_map: HashMap::new()
         }
     }
 
     pub fn compile(mir: &mir::Module, comptime_exports: Vec<Value>) -> Module {
-        let mut compiler = Self::new();
+        let mut compiler = Self::new(true);
 
         let main = compiler.compile_function_mir(&mir.runtime_main, &comptime_exports);
 
@@ -50,8 +58,7 @@ impl Compiler {
         }
 
         Module {
-            // TODO: Build only the used ones
-            comptime_exports,
+            constants: compiler.constants,
             functions,
             main
         }
@@ -124,26 +131,33 @@ impl Compiler {
         match &mir.node {
             mir::Node::Nop => (ValueRef::None, Type::None),
             mir::Node::CompileTimeGet(export_ref) => {
-                // TODO: Can the type of this be inferred on the CompileTimeSet node?
-                (ValueRef::ComptimeExport(*export_ref), Type::Any)
-                // let export_ref = if self.export_map.contains_key(export_ref) {
-                //     self.export_map[export_ref]
-                // } else {
-                //     let const_ref = ComptimeExportRef { i: self.constants.len() };
-                //
-                //     // TODO: Verify value is serializable
-                //     self.constants.push(builder.comptime_exports[export_ref.i].clone());
-                //     self.export_map.insert(*export_ref, const_ref);
-                //
-                //     const_ref
-                // };
-                //
-                // let value = &self.constants[export_ref.i];
-                //
-                // (ValueRef::ComptimeExport(export_ref), value.type_of())
+                if self.exports_are_constants {
+                    let export_ref = if self.export_const_map.contains_key(export_ref) {
+                        self.export_const_map[export_ref]
+                    } else {
+                        let const_ref = ConstRef { i: self.constants.len() };
+
+                        // TODO: Verify value is serializable
+                        self.constants.push(builder.comptime_exports[export_ref.i].clone());
+                        self.export_const_map.insert(*export_ref, const_ref);
+
+                        const_ref
+                    };
+
+                    let value = &self.constants[export_ref.i];
+
+                    (ValueRef::Const(export_ref), value.type_of())
+                } else {
+                    // TODO: Can the type of this be inferred on the CompileTimeSet node?
+                    (ValueRef::ComptimeExport(*export_ref), Type::Any)
+                }
             }
 
             mir::Node::CompileTimeSet(export_ref, mir) => {
+                if self.exports_are_constants {
+                    panic!("Cannot compile CompileTimeSet if exports are constants")
+                }
+
                 let (value_ref, value_type) = self.compile_mir(builder, block, func, mir);
 
                 let instr = Instruction::CompileTimeSet(*export_ref, value_ref, value_type);

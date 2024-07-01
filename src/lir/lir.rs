@@ -3,7 +3,7 @@ use crate::mir;
 use crate::types::{IntrinsicFn, Type};
 
 pub struct Module {
-    pub comptime_exports: Vec<Value>,
+    pub constants: Vec<Value>,
     pub functions: Vec<Function>,
     pub main: Function,
 }
@@ -46,9 +46,13 @@ pub enum ValueRef {
     Int(i64),
     Float(f64),
     ComptimeExport(mir::ComptimeExportRef),
+    Const(ConstRef),
     Param(ParamRef),
     Local(LocalRef)
 }
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub struct ConstRef { pub i: usize }
 
 #[derive(Clone, Copy)]
 pub struct ParamRef { pub i: usize }
