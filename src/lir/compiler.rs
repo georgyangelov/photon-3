@@ -24,8 +24,7 @@ enum CompilingFunction {
 struct FunctionBuilder<'a> {
     comptime_exports: &'a [Value],
     param_types: Vec<Type>,
-    local_types: Vec<Type>,
-    return_type: Type
+    local_types: Vec<Type>
 }
 
 impl Compiler {
@@ -82,7 +81,9 @@ impl Compiler {
     fn compile_function_mir(&mut self, func: &mir::Function, comptime_exports: &Vec<Value>) -> Function {
         let mut param_types = Vec::with_capacity(func.param_types.len());
         for param_type in &func.param_types {
-            param_types.push(self.read_exported_type(*param_type, comptime_exports));
+            let param_type = self.read_exported_type(*param_type, comptime_exports);
+
+            param_types.push(param_type.unwrap_or(Type::Any));
         }
 
         let return_type = self.read_exported_type(func.return_type, comptime_exports);
@@ -93,7 +94,6 @@ impl Compiler {
         let mut builder = FunctionBuilder {
             comptime_exports,
             param_types,
-            return_type,
             local_types,
         };
 
@@ -108,7 +108,7 @@ impl Compiler {
 
         Function {
             param_types: builder.param_types,
-            return_type: builder.return_type,
+            return_type: return_type.unwrap_or(typ),
             local_types: builder.local_types,
             entry
         }
@@ -229,15 +229,15 @@ impl Compiler {
         }
     }
 
-    fn read_exported_type(&self, export: Option<mir::ComptimeExportRef>, comptime_exports: &Vec<Value>) -> Type {
+    fn read_exported_type(&self, export: Option<mir::ComptimeExportRef>, comptime_exports: &Vec<Value>) -> Option<Type> {
         match export {
             // TODO: Verify that this Any is not present for runtime functions
-            None => Type::Any,
+            None => None,
             Some(export_ref) => {
                 let value = &comptime_exports[export_ref.i];
 
                 match value {
-                    Value::Type(typ) => *typ,
+                    Value::Type(typ) => Some(*typ),
                     // TODO: Location
                     _ => panic!("Invalid value specified as a type, got {:?}", value)
                 }

@@ -6,6 +6,7 @@ use crate::compiler::llvm::c_str;
 use crate::compiler::llvm::compiler_module_context::CompilerModuleContext;
 use crate::compiler::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::lir;
+use crate::types::IntrinsicFn;
 
 pub struct FunctionCompiler<'a> {
     local_types: Vec<LLVMTypeRef>,
@@ -92,7 +93,7 @@ impl <'a> FunctionCompiler<'a> {
 
         for instruction in &lir_basic_block.code {
             match instruction {
-                lir::Instruction::LocalSet(local_ref, value_ref, type_ref) => {
+                lir::Instruction::LocalSet(local_ref, value_ref, _) => {
                     let value_ref = self.llvm_value_ref_of(*value_ref);
 
                     self.local_refs[local_ref.i] = Some(value_ref);
@@ -100,7 +101,20 @@ impl <'a> FunctionCompiler<'a> {
 
                 lir::Instruction::CompileTimeSet(_, _, _) => panic!("Cannot compile CompileTimeSet"),
 
-                lir::Instruction::CallIntrinsicFunction(_, _, _, _) => {}
+                lir::Instruction::CallIntrinsicFunction(target_local_ref, intrinsic_fn, arg_refs, _) => {
+                    let mut args = Vec::with_capacity(arg_refs.len());
+                    for arg_ref in arg_refs {
+                        args.push(self.llvm_value_ref_of(*arg_ref));
+                    }
+
+                    let name = self.stmt_name_gen.next("result");
+
+                    let result_ref = match intrinsic_fn {
+                        IntrinsicFn::AddInt => LLVMBuildAdd(builder, args[0], args[1], name.as_ptr())
+                    };
+
+                    self.local_refs[target_local_ref.i] = Some(result_ref);
+                },
 
                 lir::Instruction::Return(value_ref, _) => {
                     let value_ref = self.llvm_value_ref_of(*value_ref);
