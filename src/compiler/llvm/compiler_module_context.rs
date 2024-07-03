@@ -27,7 +27,8 @@ impl CompilerModuleContext {
             Type::Bool => LLVMInt8TypeInContext(self.context),
             Type::Int => LLVMInt64TypeInContext(self.context),
             Type::Float => LLVMDoubleTypeInContext(self.context),
-            Type::Type => panic!("Cannot represent Type type in runtime-compiled code")
+            Type::Type => panic!("Cannot represent Type type in runtime-compiled code"),
+            Type::Closure(_) => todo!("Support closure structs in LLVM")
         }
     }
 }

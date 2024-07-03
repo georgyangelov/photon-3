@@ -96,8 +96,8 @@ fn run<T>(code: &str) -> T {
     let ast = parse(code).expect("Could not parse");
     let mir_module = mir::Compiler::compile_module(ast).expect("Could not compile");
 
-    let comptime_exports = lir::CompileTimeInterpreter::new(&mir_module).eval();
-    let lir_module = lir::Compiler::compile(&mir_module, comptime_exports);
+    let comptime_result = lir::CompileTimeInterpreter::new(&mir_module).eval();
+    let lir_module = lir::Compiler::compile(&mir_module, comptime_result.comptime_exports, comptime_result.type_registry);
     let mut jit_compiler = llvm::JITCompiler::new(&lir_module);
 
     let main_fn = jit_compiler.compile();

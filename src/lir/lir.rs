@@ -29,9 +29,11 @@ pub enum Instruction {
     // TODO: Type conversion operators
     // TODO: Type assertion
 
+    CreateClosure(LocalRef, FunctionRef, Vec<ValueRef>),
+
     CallIntrinsicFunction(LocalRef, IntrinsicFn, Vec<ValueRef>, Type),
     // CallStaticFunction(LocalRef, FunctionRef, Vec<ValueRef>, Type),
-    // CallDynamicFunction(LocalRef, ValueRef, Vec<ValueRef>, Type),
+    CallDynamicFunction(LocalRef, String, Vec<ValueRef>, Type),
     // CallClosureFunction(LocalRef, ValueRef, Vec<ValueRef>, Type),
 
     Return(ValueRef, Type),
@@ -47,6 +49,7 @@ pub enum ValueRef {
     Float(f64),
     ComptimeExport(mir::ComptimeExportRef),
     Const(ConstRef),
+    Capture(CaptureRef),
     Param(ParamRef),
     Local(LocalRef)
 }
@@ -54,11 +57,14 @@ pub enum ValueRef {
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ConstRef { pub i: usize }
 
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub struct CaptureRef { pub i: usize }
+
 #[derive(Clone, Copy)]
 pub struct ParamRef { pub i: usize }
 
 #[derive(Clone, Copy)]
 pub struct LocalRef { pub i: usize }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct FunctionRef { pub i: usize }

@@ -4,7 +4,7 @@ pub struct Arena<T: Sized> {
     values: Vec<T>
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct ArenaRef<T: Sized> {
     i: usize,
     refers_to: PhantomData<T>

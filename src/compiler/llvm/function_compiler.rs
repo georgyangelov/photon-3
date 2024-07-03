@@ -101,6 +101,8 @@ impl <'a> FunctionCompiler<'a> {
 
                 lir::Instruction::CompileTimeSet(_, _, _) => panic!("Cannot compile CompileTimeSet"),
 
+                lir::Instruction::CreateClosure(_, _, _) => todo!("Compile support for closures"),
+
                 lir::Instruction::CallIntrinsicFunction(target_local_ref, intrinsic_fn, arg_refs, _) => {
                     let mut args = Vec::with_capacity(arg_refs.len());
                     for arg_ref in arg_refs {
@@ -115,6 +117,8 @@ impl <'a> FunctionCompiler<'a> {
 
                     self.local_refs[target_local_ref.i] = Some(result_ref);
                 },
+
+                lir::Instruction::CallDynamicFunction(_, _, _, _) => panic!("Cannot compile dynamic function calls"),
 
                 lir::Instruction::Return(value_ref, _) => {
                     let value_ref = self.llvm_value_ref_of(*value_ref);
@@ -139,6 +143,7 @@ impl <'a> FunctionCompiler<'a> {
             lir::ValueRef::Float(_) => todo!("Support float consts"),
             lir::ValueRef::ComptimeExport(_) => todo!("Support comptime exports"),
             lir::ValueRef::Const(const_ref) => self.const_lir_value(&self.lir_module.constants[const_ref.i]),
+            lir::ValueRef::Capture(_) => todo!("Support captures"),
             lir::ValueRef::Param(param_ref) => LLVMGetParam(self.func_ref, param_ref.i as c_uint),
             lir::ValueRef::Local(local_ref) => self.local_refs[local_ref.i].expect("Local get before set")
         }

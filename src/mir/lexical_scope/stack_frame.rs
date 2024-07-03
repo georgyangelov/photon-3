@@ -79,7 +79,7 @@ impl StackFrame {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CaptureFrom {
     Capture(CaptureRef),
     Param(ParamRef),

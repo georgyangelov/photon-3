@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use crate::mir;
 use crate::lir::*;
 use crate::lir::Instruction::Return;
-use crate::types::{IntrinsicLookup, Type};
+use crate::mir::lexical_scope::CaptureFrom;
+use crate::types::{TypeRegistry, Type, ResolvedFn, intrinsic_signature};
 
-pub struct Compiler {
+pub struct Compiler<'a> {
+    mir_module: &'a mir::Module,
     exports_are_constants: bool,
-
-    intrinsic_lookup: IntrinsicLookup,
 
     constants: Vec<Value>,
 
@@ -27,16 +27,20 @@ enum CompilingFunction {
 }
 
 struct FunctionBuilder<'a> {
-    comptime_exports: &'a [Value],
+    comptime_exports: &'a Vec<Value>,
+    type_registry: &'a TypeRegistry,
     param_types: Vec<Type>,
     local_types: Vec<Type>
 }
 
-impl Compiler {
-    pub fn new(exports_are_constants: bool) -> Self {
+impl <'a> Compiler<'a> {
+    pub fn new(
+        mir_module: &'a mir::Module,
+        exports_are_constants: bool
+    ) -> Self {
         Self {
+            mir_module,
             exports_are_constants,
-            intrinsic_lookup: IntrinsicLookup::new(),
             constants: Vec::new(),
             functions: Vec::new(),
             func_map: HashMap::new(),
@@ -44,10 +48,14 @@ impl Compiler {
         }
     }
 
-    pub fn compile(mir: &mir::Module, comptime_exports: Vec<Value>) -> Module {
-        let mut compiler = Self::new(true);
+    pub fn compile(
+        mir_module: &'a mir::Module,
+        comptime_exports: Vec<Value>,
+        type_registry: TypeRegistry
+    ) -> Module {
+        let mut compiler = Self::new(mir_module, true);
 
-        let main = compiler.compile_function_mir(&mir.runtime_main, &comptime_exports);
+        let main = compiler.compile_function_mir(&mir_module.runtime_main, &comptime_exports, &type_registry);
 
         let mut functions = Vec::with_capacity(compiler.functions.len());
         for func in compiler.functions {
@@ -64,28 +72,43 @@ impl Compiler {
         }
     }
 
-    pub fn compile_main(&mut self, func: &mir::Function, comptime_exports: &Vec<Value>) -> Function {
-        self.compile_function_mir(func, comptime_exports)
+    pub fn compile_main(
+        &mut self,
+        func: &mir::Function,
+        comptime_exports: &Vec<Value>,
+        type_registry: &TypeRegistry
+    ) -> Function {
+        self.compile_function_mir(func, comptime_exports, type_registry)
     }
 
     pub fn compile_function(
         &mut self,
         mir_ref: mir::FunctionRef,
         func: &mir::Function,
-        comptime_exports: &Vec<Value>
+        comptime_exports: &Vec<Value>,
+        type_registry: &TypeRegistry
     ) -> FunctionRef {
+        if self.func_map.contains_key(&mir_ref) {
+            return self.func_map[&mir_ref]
+        }
+
         let func_ref = FunctionRef { i: self.functions.len() };
 
         self.func_map.insert(mir_ref, func_ref);
         self.functions.push(CompilingFunction::Pending);
 
-        let func = self.compile_function_mir(func, comptime_exports);
+        let func = self.compile_function_mir(func, comptime_exports, type_registry);
 
         self.functions[func_ref.i] = CompilingFunction::Compiled(func);
         func_ref
     }
 
-    fn compile_function_mir(&mut self, func: &mir::Function, comptime_exports: &Vec<Value>) -> Function {
+    fn compile_function_mir(
+        &mut self,
+        func: &mir::Function,
+        comptime_exports: &Vec<Value>,
+        type_registry: &TypeRegistry
+    ) -> Function {
         let mut param_types = Vec::with_capacity(func.param_types.len());
         for param_type in &func.param_types {
             let param_type = self.read_exported_type(*param_type, comptime_exports);
@@ -100,6 +123,7 @@ impl Compiler {
 
         let mut builder = FunctionBuilder {
             comptime_exports,
+            type_registry,
             param_types,
             local_types,
         };
@@ -217,29 +241,61 @@ impl Compiler {
                     // Concrete type, function can be determined statically
                     // TODO: Template functions can't be determined statically
                     // TODO: Support non-intrinsic functions
-                    let intrinsic = self.intrinsic_lookup.find(target_type, name);
-                    match intrinsic {
+                    let resolved_func = builder.type_registry.resolve(target_type, name);
+                    match resolved_func {
                         None => panic!("Cannot find function {} on type {:?}", name, target_type),
-                        Some((intrinsic_fn, fn_type)) => {
+                        Some(ResolvedFn::Intrinsic(intrinsic)) => {
                             // TODO: Type-check the arguments
                             // TODO: Insert conversion operators here, then call the function
 
+                            let fn_type = intrinsic_signature(intrinsic);
                             let result_type = fn_type.returns;
-                            let result_ref = new_temp_local(builder, fn_type.returns);
+                            let result_ref = new_temp_local(builder, result_type);
 
-                            let instruction = Instruction::CallIntrinsicFunction(result_ref, *intrinsic_fn, arg_refs, fn_type.returns);
-                            block.code.push(instruction);
+                            let instr = Instruction::CallIntrinsicFunction(result_ref, intrinsic, arg_refs, result_type);
+                            block.code.push(instr);
 
                             (ValueRef::Local(result_ref), result_type)
                         }
+                        Some(ResolvedFn::Function(_)) => todo!("Support non-intrinsic static functions")
                     }
                 } else {
-                    todo!("Support dynamic function calls on Any")
+                    let result_type = Type::Any;
+                    let result_ref = new_temp_local(builder, result_type);
+
+                    let instr = Instruction::CallDynamicFunction(result_ref, name.to_string(), arg_refs, result_type);
+                    block.code.push(instr);
+
+                    (ValueRef::Local(result_ref), result_type)
                 }
             }
 
-            mir::Node::CreateClosure(_, _) => todo!("Support closures"),
+            mir::Node::CreateClosure(func_ref, captures) => {
+                let mir_func = &self.mir_module.functions[func_ref.i];
+                let lir_func_ref = self.compile_function(*func_ref, mir_func, builder.comptime_exports, builder.type_registry);
+
+                let closure_type = Type::Closure(lir_func_ref);
+                let temp_local_ref = new_temp_local(builder, closure_type);
+
+                let mut capture_refs = Vec::with_capacity(captures.len());
+                for capture in captures {
+                    capture_refs.push(self.resolve_capture_ref(*capture));
+                }
+
+                block.code.push(Instruction::CreateClosure(temp_local_ref, lir_func_ref, capture_refs));
+
+                (ValueRef::Local(temp_local_ref), closure_type)
+            }
+
             mir::Node::If(_, _, _) => todo!("Support ifs")
+        }
+    }
+
+    fn resolve_capture_ref(&self, capture: CaptureFrom) -> ValueRef {
+        match capture {
+            CaptureFrom::Capture(mir_capture_ref) => ValueRef::Capture(CaptureRef { i: mir_capture_ref.i }),
+            CaptureFrom::Param(mir_param_ref) => ValueRef::Param(ParamRef { i: mir_param_ref.i }),
+            CaptureFrom::Local(mir_local_ref) => ValueRef::Local(LocalRef { i: mir_local_ref.i })
         }
     }
 
