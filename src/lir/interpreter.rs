@@ -1,11 +1,11 @@
 use std::rc::Rc;
 use crate::lir::{Function, Instruction, Value, ValueRef};
 use crate::{lir, mir};
-use crate::types::{IntrinsicFn, ResolvedFn, TypeRegistry};
+use crate::lir::compile_time_state::{CompileTimeState, ResolvedFn};
+use crate::types::{IntrinsicFn, Type};
 
 pub struct CompileTimeInterpreter<'a> {
-    comptime_exports: Vec<Value>,
-    type_registry: TypeRegistry,
+    state: CompileTimeState,
 
     lir_compiler: lir::Compiler<'a>,
 
@@ -23,40 +23,26 @@ struct StackFrame<'a> {
     locals: Vec<Value>
 }
 
-pub struct CompileTimeResult {
-    pub comptime_exports: Vec<Value>,
-    pub type_registry: TypeRegistry
-}
-
 impl <'a> CompileTimeInterpreter<'a> {
     pub fn new(mir_module: &'a mir::Module) -> Self {
-        let mut comptime_exports = Vec::new();
-
-        // TODO: Make sure exports are not used before being defined
-        comptime_exports.resize(mir_module.comptime_export_count, Value::None);
-
         let lir_compiler = lir::Compiler::new(mir_module, false);
 
-        let type_registry = TypeRegistry::new();
+        let state = CompileTimeState::new(mir_module.comptime_export_count);
 
         Self {
-            comptime_exports,
-            type_registry,
+            state,
             lir_compiler,
             mir_module
         }
     }
 
-    pub fn eval(mut self) -> CompileTimeResult {
+    pub fn eval(mut self) -> CompileTimeState {
         let main_mir = &self.mir_module.comptime_main;
-        let main_lir = self.lir_compiler.compile_main(main_mir, &self.comptime_exports, &self.type_registry);
+        let main_lir = self.lir_compiler.compile_main(main_mir, &mut self.state);
 
         self.eval_func(&main_lir, Vec::new(), Vec::new());
 
-        CompileTimeResult {
-            comptime_exports: self.comptime_exports,
-            type_registry: self.type_registry
-        }
+        self.state
     }
 
     fn eval_func(&mut self, func: &Function, args: Vec<Value>, captures: Vec<Value>) -> Value {
@@ -82,7 +68,7 @@ impl <'a> CompileTimeInterpreter<'a> {
                 }
 
                 Instruction::CompileTimeSet(export_ref, value_ref, _) => {
-                    self.comptime_exports[export_ref.i] = self.resolve_value(frame, *value_ref);
+                    self.state.comptime_exports[export_ref.i] = self.resolve_value(frame, *value_ref);
                 }
 
                 Instruction::CreateClosure(result_ref, func_ref, capture_refs) => {
@@ -103,14 +89,17 @@ impl <'a> CompileTimeInterpreter<'a> {
 
                 Instruction::CallDynamicFunction(result_ref, name, arg_refs, _) => {
                     let args = self.resolve_values(frame, arg_refs);
-                    let target_type = args[0].type_of();
+                    let arg_types = self.types_of_values(&args);
 
-                    let result = self.type_registry.resolve(target_type, name);
+                    let result = self.state.resolve_fn(name, &arg_types);
 
                     let result = match result {
-                        None => panic!("Could not find function {} on {:?}", name, target_type),
+                        None => panic!("Could not find function {} on arg types {:?}", name, &arg_types),
                         Some(ResolvedFn::Intrinsic(intrinsic)) => self.call_intrinsic(intrinsic, args),
-                        Some(ResolvedFn::Function(_)) => todo!("Support dynamic function calls")
+                        Some(ResolvedFn::Function(_)) => {
+                            // TODO: Get the mir function reference, compile the function and call it
+                            todo!("Support dynamic function calls")
+                        }
                     };
 
                     frame.locals[result_ref.i] = result;
@@ -127,10 +116,32 @@ impl <'a> CompileTimeInterpreter<'a> {
         Value::None
     }
 
-    fn call_intrinsic(&self, intrinsic: IntrinsicFn, args: Vec<Value>) -> Value {
+    fn call_intrinsic(&mut self, intrinsic: IntrinsicFn, args: Vec<Value>) -> Value {
         match intrinsic {
-            IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int())
+            IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int()),
+            IntrinsicFn::CallClosure => {
+                let (func_ref, captures) = args[0].assert_closure();
+                let captures = captures.clone();
+
+                let func = self.state.get_compiled_fn(func_ref);
+
+                let args_without_self = Vec::from(&args[1..]);
+
+                self.eval_func(func.as_ref(), args_without_self, captures)
+            }
         }
+    }
+
+    fn types_of_values(&self, values: &[Value]) -> Vec<Type> {
+        let mut types = Vec::with_capacity(values.len());
+
+        for value in values {
+            let typ = value.type_of();
+
+            types.push(typ);
+        }
+
+        types
     }
 
     fn resolve_values(&self, frame: &StackFrame, value_refs: &[ValueRef]) -> Vec<Value> {
@@ -151,7 +162,7 @@ impl <'a> CompileTimeInterpreter<'a> {
             ValueRef::Bool(value) => Value::Bool(value),
             ValueRef::Int(value) => Value::Int(value),
             ValueRef::Float(value) => Value::Float(value),
-            ValueRef::ComptimeExport(export_ref) => self.comptime_exports[export_ref.i].clone(),
+            ValueRef::ComptimeExport(export_ref) => self.state.comptime_exports[export_ref.i].clone(),
             ValueRef::Const(_) => todo!("Constants in interpreter"),
             ValueRef::Capture(capture_ref) => frame.captures[capture_ref.i].clone(),
             ValueRef::Param(param_ref) => frame.args[param_ref.i].clone(),

@@ -1,9 +1,12 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 use crate::mir;
 use crate::lir::*;
+use crate::lir::compile_time_state::{CompileTimeState, CompilingFunction, ResolvedFn};
 use crate::lir::Instruction::Return;
 use crate::mir::lexical_scope::CaptureFrom;
-use crate::types::{TypeRegistry, Type, ResolvedFn, intrinsic_signature};
+use crate::types::{Type, IntrinsicFn, FunctionSignature};
+use crate::types::IntrinsicFn::{AddInt, CallClosure};
 
 pub struct Compiler<'a> {
     mir_module: &'a mir::Module,
@@ -12,23 +15,14 @@ pub struct Compiler<'a> {
     constants: Vec<Value>,
 
     // TODO: Maybe use arenas for these functions?
-    functions: Vec<CompilingFunction>,
+    // functions: Vec<CompilingFunction>,
 
-    // struct_types: Arena<Type>,
-    // interface_types: Arena<Type>
-
-    func_map: HashMap<mir::FunctionRef, FunctionRef>,
+    // func_map: HashMap<mir::FunctionRef, FunctionRef>,
     export_const_map: HashMap<mir::ComptimeExportRef, ConstRef>
 }
 
-enum CompilingFunction {
-    Pending,
-    Compiled(Function)
-}
-
 struct FunctionBuilder<'a> {
-    comptime_exports: &'a Vec<Value>,
-    type_registry: &'a TypeRegistry,
+    state: &'a mut CompileTimeState,
     param_types: Vec<Type>,
     local_types: Vec<Type>
 }
@@ -42,26 +36,24 @@ impl <'a> Compiler<'a> {
             mir_module,
             exports_are_constants,
             constants: Vec::new(),
-            functions: Vec::new(),
-            func_map: HashMap::new(),
+            // func_map: HashMap::new(),
             export_const_map: HashMap::new()
         }
     }
 
     pub fn compile(
         mir_module: &'a mir::Module,
-        comptime_exports: Vec<Value>,
-        type_registry: TypeRegistry
+        mut state: CompileTimeState
     ) -> Module {
         let mut compiler = Self::new(mir_module, true);
 
-        let main = compiler.compile_function_mir(&mir_module.runtime_main, &comptime_exports, &type_registry);
+        let main = compiler.compile_function_mir(&mir_module.runtime_main, &mut state);
 
-        let mut functions = Vec::with_capacity(compiler.functions.len());
-        for func in compiler.functions {
+        let mut functions = Vec::with_capacity(state.functions.len());
+        for func in state.functions {
             functions.push(match func {
                 CompilingFunction::Pending => panic!("Non-compiled function still present in vec"),
-                CompilingFunction::Compiled(func) => func
+                CompilingFunction::Compiled(func) => Rc::try_unwrap(func).unwrap()
             });
         }
 
@@ -72,58 +64,49 @@ impl <'a> Compiler<'a> {
         }
     }
 
+    // TODO: Remove this function?
     pub fn compile_main(
         &mut self,
         func: &mir::Function,
-        comptime_exports: &Vec<Value>,
-        type_registry: &TypeRegistry
+        state: &mut CompileTimeState
     ) -> Function {
-        self.compile_function_mir(func, comptime_exports, type_registry)
+        self.compile_function_mir(func, state)
     }
 
     pub fn compile_function(
         &mut self,
-        mir_ref: mir::FunctionRef,
         func: &mir::Function,
-        comptime_exports: &Vec<Value>,
-        type_registry: &TypeRegistry
+        state: &mut CompileTimeState
     ) -> FunctionRef {
-        if self.func_map.contains_key(&mir_ref) {
-            return self.func_map[&mir_ref]
-        }
+        let func_ref = FunctionRef { i: state.functions.len() };
 
-        let func_ref = FunctionRef { i: self.functions.len() };
+        state.functions.push(CompilingFunction::Pending);
 
-        self.func_map.insert(mir_ref, func_ref);
-        self.functions.push(CompilingFunction::Pending);
+        let func = self.compile_function_mir(func, state);
 
-        let func = self.compile_function_mir(func, comptime_exports, type_registry);
-
-        self.functions[func_ref.i] = CompilingFunction::Compiled(func);
+        state.functions[func_ref.i] = CompilingFunction::Compiled(Rc::new(func));
         func_ref
     }
 
     fn compile_function_mir(
         &mut self,
         func: &mir::Function,
-        comptime_exports: &Vec<Value>,
-        type_registry: &TypeRegistry
+        state: &mut CompileTimeState
     ) -> Function {
         let mut param_types = Vec::with_capacity(func.param_types.len());
         for param_type in &func.param_types {
-            let param_type = self.read_exported_type(*param_type, comptime_exports);
+            let param_type = self.read_exported_type(*param_type, state);
 
             param_types.push(param_type.unwrap_or(Type::Any));
         }
 
-        let return_type = self.read_exported_type(func.return_type, comptime_exports);
+        let return_type = self.read_exported_type(func.return_type, state);
 
         let mut local_types = Vec::with_capacity(func.local_count);
         local_types.resize(func.local_count, Type::None);
 
         let mut builder = FunctionBuilder {
-            comptime_exports,
-            type_registry,
+            state,
             param_types,
             local_types,
         };
@@ -162,7 +145,7 @@ impl <'a> Compiler<'a> {
                         let const_ref = ConstRef { i: self.constants.len() };
 
                         // TODO: Verify value is serializable
-                        self.constants.push(builder.comptime_exports[export_ref.i].clone());
+                        self.constants.push(builder.state.comptime_exports[export_ref.i].clone());
                         self.export_const_map.insert(*export_ref, const_ref);
 
                         const_ref
@@ -241,14 +224,14 @@ impl <'a> Compiler<'a> {
                     // Concrete type, function can be determined statically
                     // TODO: Template functions can't be determined statically
                     // TODO: Support non-intrinsic functions
-                    let resolved_func = builder.type_registry.resolve(target_type, name);
+                    let resolved_func = builder.state.resolve_fn(name, &arg_types);
                     match resolved_func {
                         None => panic!("Cannot find function {} on type {:?}", name, target_type),
                         Some(ResolvedFn::Intrinsic(intrinsic)) => {
                             // TODO: Type-check the arguments
                             // TODO: Insert conversion operators here, then call the function
 
-                            let fn_type = intrinsic_signature(intrinsic);
+                            let fn_type = self.intrinsic_signature(builder.state, intrinsic, &arg_types);
                             let result_type = fn_type.returns;
                             let result_ref = new_temp_local(builder, result_type);
 
@@ -272,7 +255,7 @@ impl <'a> Compiler<'a> {
 
             mir::Node::CreateClosure(func_ref, captures) => {
                 let mir_func = &self.mir_module.functions[func_ref.i];
-                let lir_func_ref = self.compile_function(*func_ref, mir_func, builder.comptime_exports, builder.type_registry);
+                let lir_func_ref = self.compile_function(mir_func, &mut builder.state);
 
                 let closure_type = Type::Closure(lir_func_ref);
                 let temp_local_ref = new_temp_local(builder, closure_type);
@@ -299,18 +282,38 @@ impl <'a> Compiler<'a> {
         }
     }
 
-    fn read_exported_type(&self, export: Option<mir::ComptimeExportRef>, comptime_exports: &Vec<Value>) -> Option<Type> {
+    fn read_exported_type(&self, export: Option<mir::ComptimeExportRef>, state: &CompileTimeState) -> Option<Type> {
         match export {
             // TODO: Verify that this Any is not present for runtime functions
             None => None,
             Some(export_ref) => {
-                let value = &comptime_exports[export_ref.i];
+                let value = &state.comptime_exports[export_ref.i];
 
                 match value {
                     Value::Type(typ) => Some(*typ),
                     // TODO: Location
                     _ => panic!("Invalid value specified as a type, got {:?}", value)
                 }
+            }
+        }
+    }
+
+    // PERFORMANCE: Optimize to not create new objects every time
+    // TODO: Does this need to be in the TypeRegistry?
+    fn intrinsic_signature(&self, state: &CompileTimeState, intrinsic: IntrinsicFn, arg_types: &[Type]) -> FunctionSignature {
+        match intrinsic {
+            AddInt => FunctionSignature { params: vec![Type::Int, Type::Int], returns: Type::Int },
+            CallClosure => {
+                let lir_func_ref = match arg_types[0] {
+                    Type::Closure(lir_func_ref) => lir_func_ref,
+                    _ => panic!("Cannot call CallClosure on something that's not a closure")
+                };
+                // let mir_func = &self.mir_module.functions[func_ref.i];
+                //
+                // let lir_func_ref = self.compile_function(*func_ref, mir_func, comptime_exports, type_registry);
+                let lir_func = &state.get_compiled_fn(lir_func_ref);
+
+                FunctionSignature { params: lir_func.param_types.clone(), returns: lir_func.return_type }
             }
         }
     }

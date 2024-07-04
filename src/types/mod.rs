@@ -1,6 +1,3 @@
-mod type_registry;
-
-pub use type_registry::*;
 use crate::lir;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -20,9 +17,10 @@ pub enum Type {
     // Interface(ArenaRef<InterfaceType>)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum IntrinsicFn {
-    AddInt
+    AddInt,
+    CallClosure
 }
 
 #[derive(Clone)]

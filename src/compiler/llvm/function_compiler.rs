@@ -112,7 +112,8 @@ impl <'a> FunctionCompiler<'a> {
                     let name = self.stmt_name_gen.next("result");
 
                     let result_ref = match intrinsic_fn {
-                        IntrinsicFn::AddInt => LLVMBuildAdd(builder, args[0], args[1], name.as_ptr())
+                        IntrinsicFn::AddInt => LLVMBuildAdd(builder, args[0], args[1], name.as_ptr()),
+                        IntrinsicFn::CallClosure => todo!("Compile support for calling closures")
                     };
 
                     self.local_refs[target_local_ref.i] = Some(result_ref);

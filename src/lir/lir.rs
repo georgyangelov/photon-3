@@ -8,6 +8,7 @@ pub struct Module {
     pub main: Function,
 }
 
+#[derive(Debug)]
 pub struct Function {
     pub param_types: Vec<Type>,
     pub return_type: Type,
@@ -15,10 +16,12 @@ pub struct Function {
     pub entry: BasicBlock
 }
 
+#[derive(Debug)]
 pub struct BasicBlock {
     pub code: Vec<Instruction>
 }
 
+#[derive(Debug)]
 pub enum Instruction {
     // ParamGet(ParamRef, Type),
     // LocalGet(LocalRef, Type),
@@ -41,7 +44,7 @@ pub enum Instruction {
     If(ValueRef, BasicBlock, BasicBlock, Type)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum ValueRef {
     None,
     Bool(bool),
@@ -54,16 +57,16 @@ pub enum ValueRef {
     Local(LocalRef)
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ConstRef { pub i: usize }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct CaptureRef { pub i: usize }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ParamRef { pub i: usize }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct LocalRef { pub i: usize }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

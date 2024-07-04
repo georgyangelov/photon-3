@@ -64,7 +64,7 @@ impl Value {
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Type(_) => Type::Type,
-            Value::Closure(_, _) => todo!("Support types of closures"),
+            Value::Closure(func_ref, _) => Type::Closure(*func_ref),
         }
     }
 }

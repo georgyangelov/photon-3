@@ -30,7 +30,7 @@ fn test_add() {
 #[test]
 fn test_fns() {
     assert_eq!(run::<i64>("
-        val add = (a, b) a + b
+        val add = (a: Int, b: Int) a + b
 
         add(1, 41)
     "), 42);
@@ -96,8 +96,8 @@ fn run<T>(code: &str) -> T {
     let ast = parse(code).expect("Could not parse");
     let mir_module = mir::Compiler::compile_module(ast).expect("Could not compile");
 
-    let comptime_result = lir::CompileTimeInterpreter::new(&mir_module).eval();
-    let lir_module = lir::Compiler::compile(&mir_module, comptime_result.comptime_exports, comptime_result.type_registry);
+    let comptime_state = lir::CompileTimeInterpreter::new(&mir_module).eval();
+    let lir_module = lir::Compiler::compile(&mir_module, comptime_state);
     let mut jit_compiler = llvm::JITCompiler::new(&lir_module);
 
     let main_fn = jit_compiler.compile();
