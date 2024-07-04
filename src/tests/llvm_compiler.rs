@@ -92,6 +92,24 @@ fn test_using_comptime_vals_in_comptime_exprs() {
     "), 42)
 }
 
+#[test]
+fn test_comptime_fn_calls() {
+    assert_eq!(run::<i64>("
+        @val add_one = (a) a + 1
+
+        @add_one(41)
+    "), 42)
+}
+
+#[test]
+fn test_comptime_captures() {
+    assert_eq!(run::<i64>("
+        @val add = (a) (b) a + b
+
+        @add(41)(1)
+    "), 42)
+}
+
 fn run<T>(code: &str) -> T {
     let globals = Globals::new();
 
