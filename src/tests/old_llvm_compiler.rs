@@ -2,6 +2,7 @@ use lib::Any;
 use crate::old_compiler::llvm::LLVMJITCompiler;
 use crate::mir::Compiler;
 use crate::ast;
+use crate::lir::Globals;
 
 #[test]
 fn test_literals() {
@@ -94,8 +95,10 @@ fn test_using_comptime_vals_in_comptime_exprs() {
 }
 
 fn run(code: &str) -> Any {
+    let globals = Globals::new();
+
     let ast = parse(code).expect("Could not parse");
-    let module = Compiler::compile_module(ast).expect("Could not compile");
+    let module = Compiler::compile_module(ast, &globals).expect("Could not compile");
 
     let mut comptime_jit = LLVMJITCompiler::new(&module, true);
     let mut runtime_jit = LLVMJITCompiler::new(&module, false);

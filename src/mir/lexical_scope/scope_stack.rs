@@ -180,10 +180,20 @@ impl ScopeStack {
         let mut result = None;
 
         // Find the name in a block scope
-        while i > 0 {
+        while i >= 0 {
             match &mut self.stack[i] {
-                Scope::RootScope(_) => {}
+                Scope::RootScope(scope) => {
+                    match scope.find_global(name) {
+                        None => {}
+                        Some(global_ref) => {
+                            result = Some(NameRef::Global(global_ref));
+                            break
+                        }
+                    }
+                }
+
                 Scope::ComptimeMainFrame(_) => {}
+
                 Scope::StackFrame(scope) => {
                     match scope.find_param_or_capture(name) {
                         None => {}
@@ -196,7 +206,7 @@ impl ScopeStack {
                             break
                         }
                     }
-                },
+                }
 
                 Scope::BlockScope(scope) => {
                     match scope.find_name(name) {
@@ -220,9 +230,13 @@ impl ScopeStack {
                             break
                         }
                     }
-                },
+                }
 
                 Scope::ComptimePortal(_) => export_comptime = false
+            }
+
+            if i == 0 {
+                break
             }
 
             i -= 1;
@@ -249,7 +263,7 @@ impl ScopeStack {
             while i < self.stack.len() {
                 match &mut self.stack[i] {
                     Scope::RootScope(_) => panic!("Not possible"),
-                    Scope::ComptimeMainFrame(_) => panic!("Not possible"),
+                    Scope::ComptimeMainFrame(_) => {},
                     Scope::BlockScope(_) => {}
 
                     Scope::StackFrame(frame) => {

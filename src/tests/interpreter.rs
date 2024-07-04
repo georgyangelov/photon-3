@@ -1,5 +1,6 @@
 use crate::mir::Compiler;
 use crate::ast::{AST, Lexer, ParseError, Parser};
+use crate::lir::Globals;
 use crate::old_compiler::interpreter::{Interpreter, Value};
 
 macro_rules! expect {
@@ -159,8 +160,10 @@ fn test_ifs() {
 // }
 
 fn run(code: &str) -> (Vec<Value>, Value) {
+    let globals = Globals::new();
+
     let ast = parse(code).expect("Could not parse");
-    let module = Compiler::compile_module(ast).expect("Could not compile");
+    let module = Compiler::compile_module(ast, &globals).expect("Could not compile");
 
     let mut interpreter = Interpreter::new();
 

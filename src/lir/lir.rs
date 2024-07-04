@@ -50,6 +50,7 @@ pub enum ValueRef {
     Bool(bool),
     Int(i64),
     Float(f64),
+    Global(mir::GlobalRef),
     ComptimeExport(mir::ComptimeExportRef),
     Const(ConstRef),
     Capture(CaptureRef),

@@ -2,6 +2,7 @@ use crate::mir;
 use crate::mir::lexical_scope::*;
 use crate::ast;
 use std::borrow::Borrow;
+use crate::lir::Globals;
 
 #[derive(Debug)]
 pub enum CompileError {}
@@ -19,7 +20,7 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile_module(ast: ast::AST) -> Result<mir::Module, CompileError> {
+    pub fn compile_module(ast: ast::AST, globals: &Globals) -> Result<mir::Module, CompileError> {
         let module_location = ast.location.clone();
 
         // The module is an implicit function, it's executed like one
@@ -33,7 +34,7 @@ impl Compiler {
 
         // TODO: Populate both of these with the default types like `Int`, `Bool`, `Float`, etc.
         let mut scope = ScopeStack::new(
-            RootScope::new(),
+            RootScope::new(globals.globals.iter().map(|global| global.name.clone()).collect()),
             ComptimeMainStackFrame::new()
         );
 

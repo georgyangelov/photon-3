@@ -1,24 +1,18 @@
-use crate::mir::ComptimeExportRef;
+use crate::mir::{ComptimeExportRef, GlobalRef};
 use crate::mir::lexical_scope::*;
 
 pub struct RootScope {
-    // runtime_globals: Vec<Global>,
-    // comptime_globals: Vec<Global>,
+    globals: Vec<String>,
 
     pub comptime_exports: Vec<ComptimeExportSlot>,
 }
 
 pub struct ComptimeExportSlot {}
 
-struct Global {
-    name: String
-}
-
 impl RootScope {
-    pub fn new() -> Self {
+    pub fn new(globals: Vec<String>) -> Self {
         Self {
-            // runtime_globals: Vec::new(),
-            // comptime_globals: Vec::new(),
+            globals,
             comptime_exports: Vec::new()
         }
     }
@@ -29,5 +23,15 @@ impl RootScope {
         self.comptime_exports.push(ComptimeExportSlot {});
 
         ComptimeExportRef { i }
+    }
+
+    pub fn find_global(&mut self, name: &str) -> Option<GlobalRef> {
+        for (i, global_name) in self.globals.iter().enumerate() {
+            if global_name == name {
+                return Some(GlobalRef { i })
+            }
+        }
+
+        None
     }
 }

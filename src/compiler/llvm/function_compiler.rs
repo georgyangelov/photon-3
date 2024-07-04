@@ -142,6 +142,7 @@ impl <'a> FunctionCompiler<'a> {
             lir::ValueRef::Bool(value) => self.const_lir_value(&lir::Value::Bool(value)),
             lir::ValueRef::Int(value) => self.const_lir_value(&lir::Value::Int(value)),
             lir::ValueRef::Float(_) => todo!("Support float consts"),
+            lir::ValueRef::Global(_) => todo!("Support globals"),
             lir::ValueRef::ComptimeExport(_) => todo!("Support comptime exports"),
             lir::ValueRef::Const(const_ref) => self.const_lir_value(&self.lir_module.constants[const_ref.i]),
             lir::ValueRef::Capture(_) => todo!("Support captures"),

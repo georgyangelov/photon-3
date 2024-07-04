@@ -335,9 +335,26 @@ fn test_use_comptime_in_another_comptime_fn() {
     }
 }
 
+#[test]
+fn test_can_find_globals_in_comptime_context() {
+    /*
+        @Int
+    */
+
+    let mut scope = new_stack();
+    scope.push_comptime_portal();
+    scope.push_block();
+
+    let result = scope.access_local("Int");
+
+    assert!(matches!(result, Ok(AccessNameRef::Global(_))));
+}
+
 fn new_stack() -> ScopeStack {
     let mut stack = ScopeStack::new(
-        RootScope::new(),
+        RootScope::new(vec![
+            String::from("Int")
+        ]),
         ComptimeMainStackFrame::new()
     );
 

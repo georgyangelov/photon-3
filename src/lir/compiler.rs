@@ -9,6 +9,8 @@ use crate::types::{Type, IntrinsicFn, FunctionSignature};
 use crate::types::IntrinsicFn::{AddInt, CallClosure};
 
 pub struct Compiler<'a> {
+    globals: &'a Globals,
+
     mir_module: &'a mir::Module,
     exports_are_constants: bool,
 
@@ -29,10 +31,12 @@ struct FunctionBuilder<'a> {
 
 impl <'a> Compiler<'a> {
     pub fn new(
+        globals: &'a Globals,
         mir_module: &'a mir::Module,
         exports_are_constants: bool
     ) -> Self {
         Self {
+            globals,
             mir_module,
             exports_are_constants,
             constants: Vec::new(),
@@ -42,10 +46,11 @@ impl <'a> Compiler<'a> {
     }
 
     pub fn compile(
+        globals: &'a Globals,
         mir_module: &'a mir::Module,
         mut state: CompileTimeState
     ) -> Module {
-        let mut compiler = Self::new(mir_module, true);
+        let mut compiler = Self::new(globals, mir_module, true);
 
         let main = compiler.compile_function_mir(&mir_module.runtime_main, &mut state);
 
@@ -173,7 +178,7 @@ impl <'a> Compiler<'a> {
                 (ValueRef::None, Type::None)
             },
 
-            mir::Node::GlobalRef(_) => todo!("Support GlobalRef"),
+            mir::Node::GlobalRef(global_ref) => (ValueRef::Global(*global_ref), self.globals.globals[global_ref.i].value.type_of()),
             mir::Node::ConstStringRef(_) => todo!("Support ConstStringRef"),
             mir::Node::LiteralBool(value) => (ValueRef::Bool(*value), Type::Bool),
             mir::Node::LiteralI64(value) => (ValueRef::Int(*value), Type::Int),

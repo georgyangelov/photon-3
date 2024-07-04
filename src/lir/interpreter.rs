@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use crate::lir::{Function, Instruction, Value, ValueRef};
+use crate::lir::{Function, Globals, Instruction, Value, ValueRef};
 use crate::{lir, mir};
 use crate::lir::compile_time_state::{CompileTimeState, ResolvedFn};
 use crate::types::{IntrinsicFn, Type};
@@ -9,6 +9,7 @@ pub struct CompileTimeInterpreter<'a> {
 
     lir_compiler: lir::Compiler<'a>,
 
+    globals: &'a Globals,
     mir_module: &'a mir::Module
 
     // TODO: Optimize so that all values are part of the same Vec -> data locality
@@ -24,14 +25,15 @@ struct StackFrame<'a> {
 }
 
 impl <'a> CompileTimeInterpreter<'a> {
-    pub fn new(mir_module: &'a mir::Module) -> Self {
-        let lir_compiler = lir::Compiler::new(mir_module, false);
+    pub fn new(globals: &'a Globals, mir_module: &'a mir::Module) -> Self {
+        let lir_compiler = lir::Compiler::new(globals, mir_module, false);
 
         let state = CompileTimeState::new(mir_module.comptime_export_count);
 
         Self {
             state,
             lir_compiler,
+            globals,
             mir_module
         }
     }
@@ -162,6 +164,7 @@ impl <'a> CompileTimeInterpreter<'a> {
             ValueRef::Bool(value) => Value::Bool(value),
             ValueRef::Int(value) => Value::Int(value),
             ValueRef::Float(value) => Value::Float(value),
+            ValueRef::Global(global_ref) => self.globals.globals[global_ref.i].value.clone(),
             ValueRef::ComptimeExport(export_ref) => self.state.comptime_exports[export_ref.i].clone(),
             ValueRef::Const(_) => todo!("Constants in interpreter"),
             ValueRef::Capture(capture_ref) => frame.captures[capture_ref.i].clone(),

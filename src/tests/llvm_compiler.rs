@@ -1,6 +1,6 @@
 use crate::{ast, lir, mir};
 use crate::compiler::llvm;
-use crate::lir::Value;
+use crate::lir::{Globals, Value};
 
 #[test]
 fn test_literals() {
@@ -93,11 +93,13 @@ fn test_using_comptime_vals_in_comptime_exprs() {
 }
 
 fn run<T>(code: &str) -> T {
-    let ast = parse(code).expect("Could not parse");
-    let mir_module = mir::Compiler::compile_module(ast).expect("Could not compile");
+    let globals = Globals::new();
 
-    let comptime_state = lir::CompileTimeInterpreter::new(&mir_module).eval();
-    let lir_module = lir::Compiler::compile(&mir_module, comptime_state);
+    let ast = parse(code).expect("Could not parse");
+    let mir_module = mir::Compiler::compile_module(ast, &globals).expect("Could not compile");
+
+    let comptime_state = lir::CompileTimeInterpreter::new(&globals, &mir_module).eval();
+    let lir_module = lir::Compiler::compile(&globals, &mir_module, comptime_state);
     let mut jit_compiler = llvm::JITCompiler::new(&lir_module);
 
     let main_fn = jit_compiler.compile();
