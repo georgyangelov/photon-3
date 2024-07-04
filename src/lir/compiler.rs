@@ -25,6 +25,7 @@ pub struct Compiler<'a> {
 
 struct FunctionBuilder<'a> {
     state: &'a mut CompileTimeState,
+    capture_types: Vec<Type>,
     param_types: Vec<Type>,
     local_types: Vec<Type>
 }
@@ -52,7 +53,7 @@ impl <'a> Compiler<'a> {
     ) -> Module {
         let mut compiler = Self::new(globals, mir_module, true);
 
-        let main = compiler.compile_function_mir(&mir_module.runtime_main, &mut state);
+        let main = compiler.compile_function_mir(&mir_module.runtime_main, Vec::new(), &mut state);
 
         let mut functions = Vec::with_capacity(state.functions.len());
         for func in state.functions {
@@ -75,19 +76,20 @@ impl <'a> Compiler<'a> {
         func: &mir::Function,
         state: &mut CompileTimeState
     ) -> Function {
-        self.compile_function_mir(func, state)
+        self.compile_function_mir(func, Vec::new(), state)
     }
 
     pub fn compile_function(
         &mut self,
         func: &mir::Function,
+        capture_types: Vec<Type>,
         state: &mut CompileTimeState
     ) -> FunctionRef {
         let func_ref = FunctionRef { i: state.functions.len() };
 
         state.functions.push(CompilingFunction::Pending);
 
-        let func = self.compile_function_mir(func, state);
+        let func = self.compile_function_mir(func, capture_types, state);
 
         state.functions[func_ref.i] = CompilingFunction::Compiled(Rc::new(func));
         func_ref
@@ -96,6 +98,7 @@ impl <'a> Compiler<'a> {
     fn compile_function_mir(
         &mut self,
         func: &mir::Function,
+        capture_types: Vec<Type>,
         state: &mut CompileTimeState
     ) -> Function {
         let mut param_types = Vec::with_capacity(func.param_types.len());
@@ -112,6 +115,7 @@ impl <'a> Compiler<'a> {
 
         let mut builder = FunctionBuilder {
             state,
+            capture_types,
             param_types,
             local_types,
         };
@@ -126,6 +130,7 @@ impl <'a> Compiler<'a> {
         entry.code.push(Return(value_ref, typ));
 
         Function {
+            capture_types: builder.capture_types,
             param_types: builder.param_types,
             return_type: return_type.unwrap_or(typ),
             local_types: builder.local_types,
@@ -185,7 +190,7 @@ impl <'a> Compiler<'a> {
             mir::Node::LiteralF64(value) => (ValueRef::Float(*value), Type::Float),
             mir::Node::ParamRef(param_ref) => (ValueRef::Param(ParamRef { i: param_ref.i }), builder.param_types[param_ref.i]),
 
-            mir::Node::CaptureRef(_) => todo!("Support capture struct"),
+            mir::Node::CaptureRef(capture_ref) => (ValueRef::Capture(CaptureRef { i: capture_ref.i }), builder.capture_types[capture_ref.i]),
 
             mir::Node::LocalGet(local_ref) => (ValueRef::Local(LocalRef { i: local_ref.i }), builder.local_types[local_ref.i]),
             mir::Node::LocalSet(local_ref, mir) => {
@@ -260,7 +265,19 @@ impl <'a> Compiler<'a> {
 
             mir::Node::CreateClosure(func_ref, captures) => {
                 let mir_func = &self.mir_module.functions[func_ref.i];
-                let lir_func_ref = self.compile_function(mir_func, &mut builder.state);
+
+                let mut capture_types = Vec::with_capacity(mir_func.captures.len());
+                for capture in &mir_func.captures {
+                    let capture_type = match capture.from {
+                        CaptureFrom::Capture(capture_ref) => builder.capture_types[capture_ref.i],
+                        CaptureFrom::Param(param_ref) => builder.param_types[param_ref.i],
+                        CaptureFrom::Local(local_ref) => builder.local_types[local_ref.i]
+                    };
+
+                    capture_types.push(capture_type);
+                }
+
+                let lir_func_ref = self.compile_function(mir_func, capture_types, &mut builder.state);
 
                 let closure_type = Type::Closure(lir_func_ref);
                 let temp_local_ref = new_temp_local(builder, closure_type);

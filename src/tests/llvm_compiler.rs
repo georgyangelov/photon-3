@@ -49,7 +49,7 @@ fn test_local_captures() {
 #[test]
 fn test_param_captures() {
     assert_eq!(run::<i64>("
-        val add = (a) (b) a + b
+        val add = (a: Int) (b: Int) a + b
 
         add(1)(41)
     "), 42);

@@ -10,6 +10,7 @@ pub struct Module {
 
 #[derive(Debug)]
 pub struct Function {
+    pub capture_types: Vec<Type>,
     pub param_types: Vec<Type>,
     pub return_type: Type,
     pub local_types: Vec<Type>,
