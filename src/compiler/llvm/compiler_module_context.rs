@@ -3,7 +3,6 @@ use llvm_sys::core::*;
 use llvm_sys::LLVMLinkage;
 use llvm_sys::prelude::*;
 use crate::lir;
-use crate::lir::Function;
 use crate::types::Type;
 
 pub struct CompilerModuleContext {
@@ -126,6 +125,8 @@ impl CompilerModuleContext {
     pub unsafe fn llvm_type_of(&mut self, module: &lir::Module, typ: Type) -> LLVMTypeRef {
         match typ {
             Type::Any => panic!("Cannot represent Any type in runtime-compiled code"),
+
+            // TODO: Represent this using `void`
             Type::None => LLVMInt8TypeInContext(self.context),
             Type::Bool => LLVMInt8TypeInContext(self.context),
             Type::Int => LLVMInt64TypeInContext(self.context),
@@ -148,6 +149,7 @@ impl CompilerModuleContext {
         func: &lir::Function
     ) -> LLVMTypeRef {
         if func.capture_types.len() == 0 {
+            // TODO: Represent this using `void`
             return self.llvm_type_of(module, Type::None)
         }
 

@@ -56,6 +56,19 @@ fn test_param_captures() {
 }
 
 #[test]
+fn test_non_capture_nested_lambdas() {
+    assert_eq!(run::<i64>("
+        val get_fn = () {
+            (a: Int) a + 1
+        }
+
+        val fn = get_fn()
+
+        fn(41)
+    "), 42);
+}
+
+#[test]
 fn test_capture_captures() {
     assert_eq!(run::<i64>("
         val a = 41
