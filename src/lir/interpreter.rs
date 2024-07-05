@@ -26,7 +26,7 @@ struct StackFrame<'a> {
 
 impl <'a> CompileTimeInterpreter<'a> {
     pub fn new(globals: &'a Globals, mir_module: &'a mir::Module) -> Self {
-        let lir_compiler = lir::Compiler::new(globals, mir_module, false);
+        let lir_compiler = lir::Compiler::new(globals, mir_module, true);
 
         let state = CompileTimeState::new(mir_module.comptime_export_count);
 
@@ -81,6 +81,30 @@ impl <'a> CompileTimeInterpreter<'a> {
                     frame.locals[result_ref.i] = result;
                 }
 
+                Instruction::CallDynamicFunction(result_ref, name, arg_refs) => {
+                    let args = self.resolve_values(frame, arg_refs);
+                    let arg_types = self.types_of_values(&args);
+
+                    let result = match args[0] {
+                        Value::Closure(_, _) if name == "call" => todo!("Support dynamic calls on closures"),
+
+                        _ => {
+                            let resolved_fn = self.state.resolve_fn(name, &arg_types);
+
+                            match resolved_fn {
+                                None => panic!("Could not find function {} on arg types {:?}", name, &arg_types),
+                                Some(ResolvedFn::Intrinsic(intrinsic)) => self.call_intrinsic(intrinsic, args),
+                                Some(ResolvedFn::Function(_)) => {
+                                    // TODO: Get the mir function reference, compile the function and call it
+                                    todo!("Support dynamic function calls")
+                                }
+                            }
+                        }
+                    };
+
+                    frame.locals[result_ref.i] = result;
+                }
+
                 Instruction::CallIntrinsicFunction(result_ref, intrinsic_fn, arg_refs, _) => {
                     let args = self.resolve_values(frame, arg_refs);
 
@@ -89,20 +113,29 @@ impl <'a> CompileTimeInterpreter<'a> {
                     frame.locals[result_ref.i] = result;
                 }
 
-                Instruction::CallDynamicFunction(result_ref, name, arg_refs, _) => {
+                Instruction::CallStaticFunction(result_ref, func_ref, arg_refs, _) => {
                     let args = self.resolve_values(frame, arg_refs);
-                    let arg_types = self.types_of_values(&args);
+                    let func = self.state.get_compiled_fn(*func_ref);
 
-                    let result = self.state.resolve_fn(name, &arg_types);
+                    let result = self.eval_func(func.as_ref(), args, Vec::new());
 
-                    let result = match result {
-                        None => panic!("Could not find function {} on arg types {:?}", name, &arg_types),
-                        Some(ResolvedFn::Intrinsic(intrinsic)) => self.call_intrinsic(intrinsic, args),
-                        Some(ResolvedFn::Function(_)) => {
-                            // TODO: Get the mir function reference, compile the function and call it
-                            todo!("Support dynamic function calls")
-                        }
-                    };
+                    frame.locals[result_ref.i] = result;
+                }
+
+                Instruction::CallPtrFunction(_, _, _, _) => todo!("Support calling function pointers"),
+                Instruction::CallPtrClosureFunction(_, _, _, _, _) => todo!("Support calling closures through function pointers"),
+
+                Instruction::CallStaticClosureFunction(result_ref, func_ref, closure_ref, arg_refs, _) => {
+                    let closure_struct = self.resolve_value(frame, *closure_ref);
+                    let args = self.resolve_values(frame, arg_refs);
+
+                    let (closure_func_ref, captures) = closure_struct.assert_closure();
+                    let captures = captures.clone();
+                    assert_eq!(closure_func_ref, *func_ref);
+
+                    let func = self.state.get_compiled_fn(*func_ref);
+
+                    let result = self.eval_func(func.as_ref(), args, captures);
 
                     frame.locals[result_ref.i] = result;
                 }
@@ -120,17 +153,7 @@ impl <'a> CompileTimeInterpreter<'a> {
 
     fn call_intrinsic(&mut self, intrinsic: IntrinsicFn, args: Vec<Value>) -> Value {
         match intrinsic {
-            IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int()),
-            IntrinsicFn::CallClosure => {
-                let (func_ref, captures) = args[0].assert_closure();
-                let captures = captures.clone();
-
-                let func = self.state.get_compiled_fn(func_ref);
-
-                let args_without_self = Vec::from(&args[1..]);
-
-                self.eval_func(func.as_ref(), args_without_self, captures)
-            }
+            IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int())
         }
     }
 

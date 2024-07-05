@@ -1,10 +1,13 @@
 use crate::lir::Value;
 use crate::mir;
-use crate::types::{IntrinsicFn, Type};
+use crate::types::{FunctionSignature, IntrinsicFn, Type};
 
 pub struct Module {
     pub constants: Vec<Value>,
-    pub functions: Vec<Function>,
+
+    /// None here means that the function is not used at runtime so can be omitted
+    pub functions: Vec<Option<Function>>,
+
     pub main: Function,
 }
 
@@ -33,12 +36,28 @@ pub enum Instruction {
     // TODO: Type conversion operators
     // TODO: Type assertion
 
+    // TODO: Make this a regular struct (once we have types for them) and remove the special-cased
+    //       closure-related calls here and below
+    /// Creating a closure struct
     CreateClosure(LocalRef, FunctionRef, Vec<ValueRef>),
 
-    CallIntrinsicFunction(LocalRef, IntrinsicFn, Vec<ValueRef>, Type),
-    // CallStaticFunction(LocalRef, FunctionRef, Vec<ValueRef>, Type),
-    CallDynamicFunction(LocalRef, String, Vec<ValueRef>, Type),
-    // CallClosureFunction(LocalRef, ValueRef, Vec<ValueRef>, Type),
+    /// A call to a function based on the function's name
+    CallDynamicFunction(LocalRef, String, Vec<ValueRef>),
+
+    /// A call to a built-in function (compiler intrinsic)
+    CallIntrinsicFunction(LocalRef, IntrinsicFn, Vec<ValueRef>, FunctionSignature),
+
+    /// A call to a non-closure function known at compile time
+    CallStaticFunction(LocalRef, FunctionRef, Vec<ValueRef>, FunctionSignature),
+
+    /// A call to a closure function known at compile time
+    CallStaticClosureFunction(LocalRef, FunctionRef, ValueRef, Vec<ValueRef>, FunctionSignature),
+
+    /// A call to a non-closure function not known at compile-time (through a pointer)
+    CallPtrFunction(LocalRef, ValueRef, Vec<ValueRef>, FunctionSignature),
+
+    /// A call to a closure function not known at compile-time (through a pointer)
+    CallPtrClosureFunction(LocalRef, ValueRef, ValueRef, Vec<ValueRef>, FunctionSignature),
 
     Return(ValueRef, Type),
 

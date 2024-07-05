@@ -6,13 +6,13 @@ use crate::lir::compile_time_state::{CompileTimeState, CompilingFunction, Resolv
 use crate::lir::Instruction::Return;
 use crate::mir::lexical_scope::CaptureFrom;
 use crate::types::{Type, IntrinsicFn, FunctionSignature};
-use crate::types::IntrinsicFn::{AddInt, CallClosure};
+use crate::types::IntrinsicFn::AddInt;
 
 pub struct Compiler<'a> {
     globals: &'a Globals,
 
     mir_module: &'a mir::Module,
-    exports_are_constants: bool,
+    comptime: bool,
 
     constants: Vec<Value>,
 
@@ -34,12 +34,12 @@ impl <'a> Compiler<'a> {
     pub fn new(
         globals: &'a Globals,
         mir_module: &'a mir::Module,
-        exports_are_constants: bool
+        comptime: bool
     ) -> Self {
         Self {
             globals,
             mir_module,
-            exports_are_constants,
+            comptime,
             constants: Vec::new(),
             // func_map: HashMap::new(),
             export_const_map: HashMap::new()
@@ -51,16 +51,24 @@ impl <'a> Compiler<'a> {
         mir_module: &'a mir::Module,
         mut state: CompileTimeState
     ) -> Module {
-        let mut compiler = Self::new(globals, mir_module, true);
+        let mut compiler = Self::new(globals, mir_module, false);
 
         let main = compiler.compile_function_mir(&mir_module.runtime_main, Vec::new(), &mut state);
 
-        let mut functions = Vec::with_capacity(state.functions.len());
-        for func in state.functions {
-            functions.push(match func {
+        let mut functions: Vec<Option<Function>> = Vec::with_capacity(state.functions.len());
+        for (i, func) in state.functions.into_iter().enumerate() {
+            // TODO: Do better here
+            let func_ref = FunctionRef { i };
+            let func = match func {
                 CompilingFunction::Pending => panic!("Non-compiled function still present in vec"),
-                CompilingFunction::Compiled(func) => Rc::try_unwrap(func).unwrap()
-            });
+                CompilingFunction::Compiled(f) => Rc::try_unwrap(f).unwrap()
+            };
+
+            if state.runtime_used_functions.contains(&func_ref) {
+                functions.push(Some(func));
+            } else {
+                functions.push(None);
+            }
         }
 
         Module {
@@ -79,6 +87,10 @@ impl <'a> Compiler<'a> {
         self.compile_function_mir(func, Vec::new(), state)
     }
 
+    // TODO: Make sure that only the CreateClosure instruction compiles functions, otherwise
+    //       functions may be compiled more than once since we can't cache the result based on the
+    //       mir::FunctionRef (since it may be a reference to a template function which can be
+    //       compiled more than once).
     pub fn compile_function(
         &mut self,
         func: &mir::Function,
@@ -88,6 +100,10 @@ impl <'a> Compiler<'a> {
         let func_ref = FunctionRef { i: state.functions.len() };
 
         state.functions.push(CompilingFunction::Pending);
+
+        if !self.comptime {
+            state.mark_as_used_at_runtime(func_ref);
+        }
 
         let func = self.compile_function_mir(func, capture_types, state);
 
@@ -148,7 +164,10 @@ impl <'a> Compiler<'a> {
         match &mir.node {
             mir::Node::Nop => (ValueRef::None, Type::None),
             mir::Node::CompileTimeGet(export_ref) => {
-                if self.exports_are_constants {
+                if self.comptime {
+                    // TODO: Can the type of this be inferred on the CompileTimeSet node?
+                    (ValueRef::ComptimeExport(*export_ref), Type::Any)
+                } else {
                     let export_ref = if self.export_const_map.contains_key(export_ref) {
                         self.export_const_map[export_ref]
                     } else {
@@ -164,15 +183,12 @@ impl <'a> Compiler<'a> {
                     let value = &self.constants[export_ref.i];
 
                     (ValueRef::Const(export_ref), value.type_of())
-                } else {
-                    // TODO: Can the type of this be inferred on the CompileTimeSet node?
-                    (ValueRef::ComptimeExport(*export_ref), Type::Any)
                 }
             }
 
             mir::Node::CompileTimeSet(export_ref, mir) => {
-                if self.exports_are_constants {
-                    panic!("Cannot compile CompileTimeSet if exports are constants")
+                if !self.comptime {
+                    panic!("Cannot compile CompileTimeSet if not in comptime execution")
                 }
 
                 let (value_ref, value_type) = self.compile_mir(builder, block, func, mir);
@@ -217,49 +233,78 @@ impl <'a> Compiler<'a> {
             mir::Node::Call(name, target, args) => {
                 let (target_ref, target_type) = self.compile_mir(builder, block, func, target);
 
-                let mut arg_refs = Vec::with_capacity(args.len() + 1);
-                let mut arg_types = Vec::with_capacity(args.len() + 1);
+                match target_type {
+                    Type::Any => {
+                        let (arg_refs, _) = self.compile_args_with_target(builder, block, func, target_ref, target_type, args);
 
-                arg_refs.push(target_ref);
-                arg_types.push(target_type);
+                        let result_type = Type::Any;
+                        let result_ref = new_temp_local(builder, result_type);
 
-                for arg in args {
-                    let (arg_ref, arg_type) = self.compile_mir(builder, block, func, arg);
+                        let instr = Instruction::CallDynamicFunction(result_ref, name.to_string(), arg_refs);
+                        block.code.push(instr);
 
-                    arg_refs.push(arg_ref);
-                    arg_types.push(arg_type);
-                }
-
-                if target_type != Type::Any {
-                    // Concrete type, function can be determined statically
-                    // TODO: Template functions can't be determined statically
-                    // TODO: Support non-intrinsic functions
-                    let resolved_func = builder.state.resolve_fn(name, &arg_types);
-                    match resolved_func {
-                        None => panic!("Cannot find function {} on type {:?}", name, target_type),
-                        Some(ResolvedFn::Intrinsic(intrinsic)) => {
-                            // TODO: Type-check the arguments
-                            // TODO: Insert conversion operators here, then call the function
-
-                            let fn_type = self.intrinsic_signature(builder.state, intrinsic, &arg_types);
-                            let result_type = fn_type.returns;
-                            let result_ref = new_temp_local(builder, result_type);
-
-                            let instr = Instruction::CallIntrinsicFunction(result_ref, intrinsic, arg_refs, result_type);
-                            block.code.push(instr);
-
-                            (ValueRef::Local(result_ref), result_type)
-                        }
-                        Some(ResolvedFn::Function(_)) => todo!("Support non-intrinsic static functions")
+                        (ValueRef::Local(result_ref), result_type)
                     }
-                } else {
-                    let result_type = Type::Any;
-                    let result_ref = new_temp_local(builder, result_type);
 
-                    let instr = Instruction::CallDynamicFunction(result_ref, name.to_string(), arg_refs, result_type);
-                    block.code.push(instr);
+                    Type::Closure(func_ref) if name.as_ref() == "call" => {
+                        let (arg_refs, _) = self.compile_args(builder, block, func, args);
 
-                    (ValueRef::Local(result_ref), result_type)
+                        let lir_func = &builder.state.get_compiled_fn(func_ref);
+                        let func_signature = FunctionSignature {
+                            params: lir_func.param_types.clone(),
+                            returns: lir_func.return_type
+                        };
+
+                        let result_ref = new_temp_local(builder, lir_func.return_type);
+
+                        let instr = if lir_func.capture_types.is_empty() {
+                            // Function does not have any captures, so just generate a static call without capture struct
+                            Instruction::CallStaticFunction(
+                                result_ref,
+                                func_ref,
+                                arg_refs,
+                                func_signature
+                            )
+                        } else {
+                            // Function has captures, so generate a static closure call
+                            Instruction::CallStaticClosureFunction(
+                                result_ref,
+                                func_ref,
+                                target_ref,
+                                arg_refs,
+                                func_signature
+                            )
+                        };
+                        block.code.push(instr);
+
+                        (ValueRef::Local(result_ref), lir_func.return_type)
+                    }
+
+                    _ => {
+                        let (arg_refs, arg_types) = self.compile_args_with_target(builder, block, func, target_ref, target_type, args);
+
+                        // Concrete type, function can be determined statically
+                        // TODO: Template functions can't be determined statically
+                        // TODO: Support non-intrinsic functions
+                        let resolved_func = builder.state.resolve_fn(name, &arg_types);
+                        match resolved_func {
+                            None => panic!("Cannot find function {} on type {:?}", name, target_type),
+                            Some(ResolvedFn::Intrinsic(intrinsic)) => {
+                                // TODO: Type-check the arguments
+                                // TODO: Insert conversion operators here, then call the function
+
+                                let fn_type = self.intrinsic_signature(builder.state, intrinsic, &arg_types);
+                                let result_type = fn_type.returns;
+                                let result_ref = new_temp_local(builder, result_type);
+
+                                let instr = Instruction::CallIntrinsicFunction(result_ref, intrinsic, arg_refs, fn_type);
+                                block.code.push(instr);
+
+                                (ValueRef::Local(result_ref), result_type)
+                            }
+                            Some(ResolvedFn::Function(_)) => todo!("Support non-intrinsic static functions")
+                        }
+                    }
                 }
             }
 
@@ -296,6 +341,51 @@ impl <'a> Compiler<'a> {
         }
     }
 
+    fn compile_args_with_target(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        block: &mut BasicBlock,
+        func: &mir::Function,
+        target_ref: ValueRef,
+        target_type: Type,
+        args: &[mir::MIR]
+    ) -> (Vec<ValueRef>, Vec<Type>) {
+        let mut arg_refs = Vec::with_capacity(args.len() + 1);
+        let mut arg_types = Vec::with_capacity(args.len() + 1);
+
+        arg_refs.push(target_ref);
+        arg_types.push(target_type);
+
+        for arg in args {
+            let (arg_ref, arg_type) = self.compile_mir(builder, block, func, arg);
+
+            arg_refs.push(arg_ref);
+            arg_types.push(arg_type);
+        }
+
+        (arg_refs, arg_types)
+    }
+
+    fn compile_args(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        block: &mut BasicBlock,
+        func: &mir::Function,
+        args: &[mir::MIR]
+    ) -> (Vec<ValueRef>, Vec<Type>) {
+        let mut arg_refs = Vec::with_capacity(args.len());
+        let mut arg_types = Vec::with_capacity(args.len());
+
+        for arg in args {
+            let (arg_ref, arg_type) = self.compile_mir(builder, block, func, arg);
+
+            arg_refs.push(arg_ref);
+            arg_types.push(arg_type);
+        }
+
+        (arg_refs, arg_types)
+    }
+
     fn resolve_capture_ref(&self, capture: CaptureFrom) -> ValueRef {
         match capture {
             CaptureFrom::Capture(mir_capture_ref) => ValueRef::Capture(CaptureRef { i: mir_capture_ref.i }),
@@ -324,19 +414,7 @@ impl <'a> Compiler<'a> {
     // TODO: Does this need to be in the TypeRegistry?
     fn intrinsic_signature(&self, state: &CompileTimeState, intrinsic: IntrinsicFn, arg_types: &[Type]) -> FunctionSignature {
         match intrinsic {
-            AddInt => FunctionSignature { params: vec![Type::Int, Type::Int], returns: Type::Int },
-            CallClosure => {
-                let lir_func_ref = match arg_types[0] {
-                    Type::Closure(lir_func_ref) => lir_func_ref,
-                    _ => panic!("Cannot call CallClosure on something that's not a closure")
-                };
-                // let mir_func = &self.mir_module.functions[func_ref.i];
-                //
-                // let lir_func_ref = self.compile_function(*func_ref, mir_func, comptime_exports, type_registry);
-                let lir_func = &state.get_compiled_fn(lir_func_ref);
-
-                FunctionSignature { params: lir_func.param_types.clone(), returns: lir_func.return_type }
-            }
+            AddInt => FunctionSignature { params: vec![Type::Int, Type::Int], returns: Type::Int }
         }
     }
 }

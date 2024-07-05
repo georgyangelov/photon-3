@@ -19,11 +19,10 @@ pub enum Type {
 
 #[derive(Debug, Clone, Copy)]
 pub enum IntrinsicFn {
-    AddInt,
-    CallClosure
+    AddInt
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FunctionSignature {
     pub params: Vec<Type>,
     pub returns: Type

@@ -1,6 +1,6 @@
 use crate::{ast, lir, mir};
 use crate::compiler::llvm;
-use crate::lir::{Globals, Value};
+use crate::lir::Globals;
 
 #[test]
 fn test_literals() {
@@ -40,7 +40,7 @@ fn test_fns() {
 fn test_local_captures() {
     assert_eq!(run::<i64>("
         val a = 41
-        val add = (b) a + b
+        val add = (b: Int) a + b
 
         add(1)
     "), 42);
@@ -60,7 +60,7 @@ fn test_capture_captures() {
     assert_eq!(run::<i64>("
         val a = 41
         val add = () {
-            (b) a + b
+            (b: Int) a + b
         }
 
         add()(1)

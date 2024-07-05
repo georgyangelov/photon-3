@@ -13,6 +13,7 @@ use crate::compiler::llvm::c_str;
 use crate::compiler::llvm::compiler_module_context::CompilerModuleContext;
 use crate::compiler::llvm::function_compiler::FunctionCompiler;
 use crate::lir;
+use crate::lir::Function;
 
 pub struct JITCompiler<'a> {
     lir_module: &'a lir::Module,
@@ -65,13 +66,35 @@ impl <'a> JITCompiler<'a> {
 
     pub fn compile<T>(&mut self) -> unsafe extern "C" fn() -> T {
         unsafe {
+            self.context.declare_functions(self.lir_module);
+            let main_decl = self.context.declare_main(self.lir_module);
+
             FunctionCompiler::compile(
                 &mut self.context,
                 self.lir_module,
                 self.main_fn,
-                "main",
-                true
+                &main_decl
             );
+
+            for (i, func) in self.lir_module.functions.iter().enumerate() {
+                match func {
+                    None => {
+                        // Function is only used compile-time, we don't need to compile it for runtime
+                    }
+
+                    Some(func) => {
+                        // TODO: Make this not clone
+                        let func_decl = self.context.function_declarations[i].clone();
+
+                        FunctionCompiler::compile(
+                            &mut self.context,
+                            self.lir_module,
+                            func,
+                            &func_decl
+                        )
+                    }
+                }
+            }
 
             self.jit_compile_module();
 
