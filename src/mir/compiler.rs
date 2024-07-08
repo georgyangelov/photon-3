@@ -199,7 +199,7 @@ impl Compiler {
 
             ast::Value::NameRef(name) => {
                 return self.access_name_mir(scope, name.borrow(), location)
-                    .map_err(|error| todo!("Compile error - name not found or something else"));
+                    .map_err(|error| todo!("Compile error - name not found or something else: {:?}, {}", error, name));
             },
 
             ast::Value::Function(func) => {

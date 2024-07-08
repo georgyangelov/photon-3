@@ -140,7 +140,7 @@ impl <'a> Compiler<'a> {
             code: Vec::new()
         };
 
-        let (value_ref, typ) = self.compile_mir(&mut builder, &mut entry, func, &func.body);
+        let (value_ref, typ) = self.compile_mir(&mut builder, &mut entry, &func.body);
 
         // TODO: Type-check the type with builder.return_type
         entry.code.push(Return(value_ref, typ));
@@ -158,7 +158,6 @@ impl <'a> Compiler<'a> {
         &mut self,
         builder: &mut FunctionBuilder,
         block: &mut BasicBlock,
-        func: &mir::Function,
         mir: &mir::MIR
     ) -> (ValueRef, Type) {
         match &mir.node {
@@ -191,7 +190,7 @@ impl <'a> Compiler<'a> {
                     panic!("Cannot compile CompileTimeSet if not in comptime execution")
                 }
 
-                let (value_ref, value_type) = self.compile_mir(builder, block, func, mir);
+                let (value_ref, value_type) = self.compile_mir(builder, block, mir);
 
                 let instr = Instruction::CompileTimeSet(*export_ref, value_ref, value_type);
                 block.code.push(instr);
@@ -211,7 +210,7 @@ impl <'a> Compiler<'a> {
             mir::Node::LocalGet(local_ref) => (ValueRef::Local(LocalRef { i: local_ref.i }), builder.local_types[local_ref.i]),
             mir::Node::LocalSet(local_ref, mir) => {
                 let local_ref = LocalRef { i: local_ref.i };
-                let (value_ref, typ) = self.compile_mir(builder, block, func, mir);
+                let (value_ref, typ) = self.compile_mir(builder, block, mir);
 
                 builder.local_types[local_ref.i] = typ;
 
@@ -224,18 +223,18 @@ impl <'a> Compiler<'a> {
                 let mut result = (ValueRef::None, Type::None);
 
                 for mir in mirs {
-                    result = self.compile_mir(builder, block, func, mir);
+                    result = self.compile_mir(builder, block, mir);
                 }
 
                 result
             }
 
             mir::Node::Call(name, target, args) => {
-                let (target_ref, target_type) = self.compile_mir(builder, block, func, target);
+                let (target_ref, target_type) = self.compile_mir(builder, block, target);
 
                 match target_type {
                     Type::Any => {
-                        let (arg_refs, _) = self.compile_args_with_target(builder, block, func, target_ref, target_type, args);
+                        let (arg_refs, _) = self.compile_args_with_target(builder, block, target_ref, target_type, args);
 
                         let result_type = Type::Any;
                         let result_ref = new_temp_local(builder, result_type);
@@ -247,7 +246,7 @@ impl <'a> Compiler<'a> {
                     }
 
                     Type::Closure(func_ref) if name.as_ref() == "call" => {
-                        let (arg_refs, _) = self.compile_args(builder, block, func, args);
+                        let (arg_refs, _) = self.compile_args(builder, block, args);
 
                         let lir_func = &builder.state.get_compiled_fn(func_ref);
                         let func_signature = FunctionSignature {
@@ -281,7 +280,7 @@ impl <'a> Compiler<'a> {
                     }
 
                     _ => {
-                        let (arg_refs, arg_types) = self.compile_args_with_target(builder, block, func, target_ref, target_type, args);
+                        let (arg_refs, arg_types) = self.compile_args_with_target(builder, block, target_ref, target_type, args);
 
                         // Concrete type, function can be determined statically
                         // TODO: Template functions can't be determined statically
@@ -345,7 +344,6 @@ impl <'a> Compiler<'a> {
         &mut self,
         builder: &mut FunctionBuilder,
         block: &mut BasicBlock,
-        func: &mir::Function,
         target_ref: ValueRef,
         target_type: Type,
         args: &[mir::MIR]
@@ -357,7 +355,7 @@ impl <'a> Compiler<'a> {
         arg_types.push(target_type);
 
         for arg in args {
-            let (arg_ref, arg_type) = self.compile_mir(builder, block, func, arg);
+            let (arg_ref, arg_type) = self.compile_mir(builder, block, arg);
 
             arg_refs.push(arg_ref);
             arg_types.push(arg_type);
@@ -370,14 +368,13 @@ impl <'a> Compiler<'a> {
         &mut self,
         builder: &mut FunctionBuilder,
         block: &mut BasicBlock,
-        func: &mir::Function,
         args: &[mir::MIR]
     ) -> (Vec<ValueRef>, Vec<Type>) {
         let mut arg_refs = Vec::with_capacity(args.len());
         let mut arg_types = Vec::with_capacity(args.len());
 
         for arg in args {
-            let (arg_ref, arg_type) = self.compile_mir(builder, block, func, arg);
+            let (arg_ref, arg_type) = self.compile_mir(builder, block, arg);
 
             arg_refs.push(arg_ref);
             arg_types.push(arg_type);
