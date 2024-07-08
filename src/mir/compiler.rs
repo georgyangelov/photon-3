@@ -7,10 +7,6 @@ use crate::lir::Globals;
 #[derive(Debug)]
 pub enum CompileError {}
 
-struct FunctionTemplate {
-    body: ast::AST
-}
-
 pub struct Compiler {
     pub const_strings: Vec<Box<str>>,
 

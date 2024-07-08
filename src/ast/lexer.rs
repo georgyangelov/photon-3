@@ -124,10 +124,6 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         }
     }
 
-    pub fn has_next(&self) -> bool {
-        !self.at_start && self.c == EOF
-    }
-
     fn read_string(&mut self, had_whitespace: bool) -> Result<Token, LexerError> {
         let mut string = String::new();
         let from = self.position;

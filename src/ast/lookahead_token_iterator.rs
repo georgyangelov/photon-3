@@ -27,16 +27,6 @@ impl <I: Iterator<Item = char>> LookaheadTokenIterator<I> {
             i: 0,
         }
     }
-
-    pub fn peek(&mut self) -> Result<&Token, LexerError> {
-        if self.buffer.len() == 0 {
-            let token = self.lexer.next()?;
-
-            self.buffer.push_back(token);
-        }
-
-        Ok(self.buffer.front().unwrap())
-    }
 }
 
 pub struct LookaheadIteratorIterator<'a, I: Iterator<Item = char>> {

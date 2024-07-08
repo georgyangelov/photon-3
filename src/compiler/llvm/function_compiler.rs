@@ -5,7 +5,6 @@ use crate::compiler::llvm::compiler_module_context::{CompilerModuleContext, Func
 use crate::compiler::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::lir;
 use crate::types::IntrinsicFn;
-use crate::types::Type;
 
 pub struct FunctionCompiler<'a> {
     decl: &'a FunctionDeclaration,
@@ -16,8 +15,7 @@ pub struct FunctionCompiler<'a> {
 
     c: &'a mut CompilerModuleContext,
 
-    lir_module: &'a lir::Module,
-    func: &'a lir::Function
+    lir_module: &'a lir::Module
 }
 
 impl <'a> FunctionCompiler<'a> {
@@ -39,8 +37,7 @@ impl <'a> FunctionCompiler<'a> {
 
             c,
 
-            lir_module,
-            func
+            lir_module
         };
 
         function_builder.compile_basic_block(&func.entry, "entry");

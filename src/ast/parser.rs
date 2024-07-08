@@ -7,7 +7,6 @@ use crate::ast::TokenValue::*;
 #[derive(Debug)]
 pub enum ParseError {
     UnexpectedToken(Box<str>, Token),
-    UnexpectedEOF,
     UnexpectedPattern(Pattern),
     CouldNotParseNumber(Location),
     LexerError(LexerError)

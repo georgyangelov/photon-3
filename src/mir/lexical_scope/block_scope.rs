@@ -1,4 +1,3 @@
-use crate::mir::lexical_scope::*;
 use crate::mir::{ComptimeExportRef, StackFrameLocalRef};
 
 /// A simple block scope - it defines new variables in its closest parent stack frame and ensures

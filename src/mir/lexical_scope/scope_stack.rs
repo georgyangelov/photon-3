@@ -30,10 +30,6 @@ impl ScopeStack {
         (root, comptime_main)
     }
 
-    pub fn push(&mut self, scope: Scope) {
-        self.stack.push(scope)
-    }
-
     pub fn push_block(&mut self) {
         let scope = BlockScope::new();
 
@@ -180,7 +176,7 @@ impl ScopeStack {
         let mut result = None;
 
         // Find the name in a block scope
-        while i >= 0 {
+        loop {
             match &mut self.stack[i] {
                 Scope::RootScope(scope) => {
                     match scope.find_global(name) {

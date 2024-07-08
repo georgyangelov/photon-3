@@ -10,4 +10,3 @@ pub use interpreter::*;
 pub use compiler::*;
 pub use value::*;
 pub use globals::*;
-pub use compile_time_state::*;

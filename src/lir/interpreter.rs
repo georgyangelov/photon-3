@@ -16,8 +16,7 @@ pub struct CompileTimeInterpreter<'a> {
     // stack: Vec<StackFrame>
 }
 
-struct StackFrame<'a> {
-    func: &'a Function,
+struct StackFrame {
     // globals: Vec<Value>,
     captures: Vec<Value>,
     args: Vec<Value>,
@@ -51,7 +50,7 @@ impl <'a> CompileTimeInterpreter<'a> {
         let mut locals = Vec::new();
         locals.resize(func.local_types.len(), Value::None);
 
-        let mut frame = StackFrame { func, captures, args, locals };
+        let mut frame = StackFrame { captures, args, locals };
 
         self.eval_basic_block(&mut frame, &func.entry)
     }

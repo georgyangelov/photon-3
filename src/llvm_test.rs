@@ -1,21 +1,13 @@
 use core::ffi;
-use std::ffi::{c_char, c_void, CString};
-use std::process::Command;
+use std::ffi::{c_char, CString};
 use std::ptr;
-use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyFunction, LLVMVerifyModule};
+use llvm_sys::analysis::{LLVMVerifierFailureAction, LLVMVerifyModule};
 use llvm_sys::core::*;
-use llvm_sys::debuginfo::LLVMDIBuilderCreateConstantValueExpression;
-use llvm_sys::error::{LLVMDisposeErrorMessage, LLVMGetErrorMessage};
-use llvm_sys::LLVMLinkage::LLVMExternalLinkage;
-use llvm_sys::{LLVMDiagnosticHandler, LLVMVisibility};
-use llvm_sys::execution_engine::{LLVMCreateExecutionEngineForModule, LLVMExecutionEngineRef};
-use llvm_sys::orc2::lljit::{LLVMOrcCreateLLJIT, LLVMOrcCreateLLJITBuilder, LLVMOrcDisposeLLJITBuilder, LLVMOrcLLJITAddLLVMIRModule, LLVMOrcLLJITGetExecutionSession, LLVMOrcLLJITGetGlobalPrefix, LLVMOrcLLJITGetMainJITDylib, LLVMOrcLLJITLookup, LLVMOrcLLJITMangleAndIntern, LLVMOrcLLJITRef};
-use llvm_sys::orc2::{LLVMJITEvaluatedSymbol, LLVMJITSymbolFlags, LLVMJITSymbolTargetFlags, LLVMOrcAbsoluteSymbols, LLVMOrcCJITDylibSearchOrder, LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess, LLVMOrcCreateNewThreadSafeContext, LLVMOrcCreateNewThreadSafeModule, LLVMOrcCSymbolMapPair, LLVMOrcDisposeThreadSafeContext, LLVMOrcExecutionSessionCreateJITDylib, LLVMOrcExecutionSessionIntern, LLVMOrcExecutionSessionLookup, LLVMOrcExecutorAddress, LLVMOrcJITDylibAddGenerator, LLVMOrcJITDylibCreateResourceTracker, LLVMOrcJITDylibDefine, LLVMOrcJITDylibRef, LLVMOrcLookupKind, LLVMOrcThreadSafeContextGetContext};
-use llvm_sys::orc2::LLVMJITSymbolGenericFlags::LLVMJITSymbolGenericFlagsExported;
+use llvm_sys::error::{LLVMGetErrorMessage};
+use llvm_sys::orc2::lljit::*;
+use llvm_sys::orc2::*;
 use llvm_sys::prelude::LLVMDiagnosticInfoRef;
 use llvm_sys::target::*;
-use llvm_sys::target_machine::*;
-use llvm_sys::transforms::pass_builder::{LLVMCreatePassBuilderOptions, LLVMPassBuilderOptionsSetDebugLogging, LLVMPassBuilderOptionsSetInlinerThreshold, LLVMRunPasses};
 
 macro_rules! c_str {
     ($s:expr) => (
@@ -23,7 +15,7 @@ macro_rules! c_str {
     );
 }
 
-pub extern "C" fn diagnostic_handler(arg1: LLVMDiagnosticInfoRef, arg2: *mut ffi::c_void) {
+pub extern "C" fn diagnostic_handler(arg1: LLVMDiagnosticInfoRef, _: *mut ffi::c_void) {
     unsafe {
         let severity = LLVMGetDiagInfoSeverity(arg1);
         let description = LLVMGetDiagInfoDescription(arg1);
@@ -282,9 +274,8 @@ pub unsafe fn llvm_test() {
     // LLVMContextDispose(context);
 }
 
-#[repr(C, packed)]
-struct Value {
-    typ: i32,
-    val: i64
-}
-
+// #[repr(C, packed)]
+// struct Value {
+//     typ: i32,
+//     val: i64
+// }

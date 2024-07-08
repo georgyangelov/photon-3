@@ -59,11 +59,6 @@ pub enum Node {
     If(Box<MIR>, Box<MIR>, Option<Box<MIR>>),
 }
 
-#[derive(Debug)]
-pub struct FrameLayout {
-    pub size: usize
-}
-
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FunctionRef { pub i: usize }
 

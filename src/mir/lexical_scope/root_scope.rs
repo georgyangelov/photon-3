@@ -1,5 +1,4 @@
 use crate::mir::{ComptimeExportRef, GlobalRef};
-use crate::mir::lexical_scope::*;
 
 pub struct RootScope {
     globals: Vec<String>,

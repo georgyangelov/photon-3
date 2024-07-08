@@ -5,7 +5,6 @@ use llvm_sys::core::*;
 use llvm_sys::error::*;
 use llvm_sys::orc2::*;
 use llvm_sys::orc2::lljit::*;
-use llvm_sys::prelude::*;
 use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
@@ -13,7 +12,6 @@ use crate::compiler::llvm::c_str;
 use crate::compiler::llvm::compiler_module_context::CompilerModuleContext;
 use crate::compiler::llvm::function_compiler::FunctionCompiler;
 use crate::lir;
-use crate::lir::Function;
 
 pub struct JITCompiler<'a> {
     lir_module: &'a lir::Module,

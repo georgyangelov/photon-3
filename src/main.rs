@@ -9,7 +9,6 @@ mod llvm_test;
 mod llvm_test_2;
 mod lir;
 mod types;
-mod lib;
 mod compiler;
 
 fn main() {
