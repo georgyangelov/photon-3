@@ -72,6 +72,21 @@ impl <'a> CompileTimeInterpreter<'a> {
                     self.state.comptime_exports[export_ref.i] = self.resolve_value(frame, *value_ref);
                 }
 
+                Instruction::CreateDynamicClosure(result_ref, mir_func_ref, capture_types, capture_refs) => {
+                    let mir_func = &self.mir_module.functions[mir_func_ref.i];
+
+                    // TODO: Cache this compilation based on the exported types
+                    let lir_func_ref = self.lir_compiler.compile_function(mir_func, capture_types.clone(), &mut self.state);
+
+                    // TODO: Do we want to specify the closure types based on the values?
+                    //       Do we want those to be more specific than what is known at LIR compile time?
+                    let captures = self.resolve_values(frame, capture_refs);
+
+                    let result = Value::Closure(lir_func_ref, Rc::new(captures));
+
+                    frame.locals[result_ref.i] = result;
+                }
+
                 Instruction::CreateClosure(result_ref, func_ref, capture_refs) => {
                     let captures = self.resolve_values(frame, capture_refs);
 
@@ -84,8 +99,17 @@ impl <'a> CompileTimeInterpreter<'a> {
                     let args = self.resolve_values(frame, arg_refs);
                     let arg_types = self.types_of_values(&args);
 
-                    let result = match args[0] {
-                        Value::Closure(_, _) if name == "call" => todo!("Support dynamic calls on closures"),
+                    let result = match &args[0] {
+                        // TODO: Do we want this to be an intrinsic?
+                        Value::Closure(func_ref, captures) if name == "call" => {
+                            let func = self.state.get_compiled_fn(*func_ref);
+                            let captures = captures.as_ref().clone();
+
+                            // TODO: Is it better to not clone the args here?
+                            let args_without_self = args[1..].to_vec();
+
+                            self.eval_func(func.as_ref(), args_without_self, captures)
+                        }
 
                         _ => {
                             let resolved_fn = self.state.resolve_fn(name, &arg_types);

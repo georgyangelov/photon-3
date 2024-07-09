@@ -4,6 +4,7 @@ use crate::mir;
 use crate::lir::*;
 use crate::lir::compile_time_state::{CompileTimeState, CompilingFunction, ResolvedFn};
 use crate::lir::Instruction::Return;
+use crate::mir::ComptimeExportRef;
 use crate::mir::lexical_scope::CaptureFrom;
 use crate::types::{Type, IntrinsicFn, FunctionSignature};
 use crate::types::IntrinsicFn::AddInt;
@@ -321,19 +322,35 @@ impl <'a> Compiler<'a> {
                     capture_types.push(capture_type);
                 }
 
-                let lir_func_ref = self.compile_function(mir_func, capture_types, &mut builder.state);
-
-                let closure_type = Type::Closure(lir_func_ref);
-                let temp_local_ref = new_temp_local(builder, closure_type);
+                let is_static_closure = self.is_static_closure(builder.state, mir_func);
+                if !is_static_closure && !self.comptime {
+                    todo!("Handle this as an error, either here or in the LLVM compiler")
+                }
 
                 let mut capture_refs = Vec::with_capacity(captures.len());
                 for capture in captures {
                     capture_refs.push(self.resolve_capture_ref(*capture));
                 }
 
-                block.code.push(Instruction::CreateClosure(temp_local_ref, lir_func_ref, capture_refs));
+                if is_static_closure {
+                    let lir_func_ref = self.compile_function(mir_func, capture_types, &mut builder.state);
+                    let closure_type = Type::Closure(lir_func_ref);
+                    let temp_local_ref = new_temp_local(builder, closure_type);
 
-                (ValueRef::Local(temp_local_ref), closure_type)
+                    block.code.push(Instruction::CreateClosure(temp_local_ref, lir_func_ref, capture_refs));
+
+                    (ValueRef::Local(temp_local_ref), closure_type)
+                } else {
+                    // TODO: Do we want to be more specific here - be able to define this as an AnyClosure?
+                    //       In any case we need to support calling closures through an Any, so it shouldn't
+                    //       matter that much.
+                    let closure_type = Type::Any;
+                    let temp_local_ref = new_temp_local(builder, closure_type);
+
+                    block.code.push(Instruction::CreateDynamicClosure(temp_local_ref, *func_ref, capture_types, capture_refs));
+
+                    (ValueRef::Local(temp_local_ref), closure_type)
+                }
             }
 
             mir::Node::If(_, _, _) => todo!("Support ifs")
@@ -413,6 +430,37 @@ impl <'a> Compiler<'a> {
         match intrinsic {
             AddInt => FunctionSignature { params: vec![Type::Int, Type::Int], returns: Type::Int }
         }
+    }
+
+    /// Checks if the mir function has already-known parameter and return types.
+    /// A function with no defined param types or return type is considered static as well.
+    fn is_static_closure(&self, state: &CompileTimeState, func: &mir::Function) -> bool {
+        // TODO: Better check for if the comptime export is defined already or not?
+        for param_type in &func.param_types {
+            match param_type {
+                None => {}
+                Some(param_ref) => {
+                    let value = &state.comptime_exports[param_ref.i];
+
+                    if matches!(value, Value::None) {
+                        return false
+                    }
+                }
+            }
+        }
+
+        match func.return_type {
+            None => {}
+            Some(param_ref) => {
+                let value = &state.comptime_exports[param_ref.i];
+
+                if matches!(value, Value::None) {
+                    return false
+                }
+            }
+        }
+
+        true
     }
 }
 

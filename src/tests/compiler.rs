@@ -123,11 +123,34 @@ fn test_comptime_captures() {
     "), 42)
 }
 
+#[test]
+fn test_using_types_in_comptime() {
+    assert_eq!(run::<i64>("
+        @val add = (a: Int, b: Int): Int a + b
+
+        @add(1, 41)
+    "), 42)
+}
+
+#[test]
+fn test_comptime_dynamic_closures() {
+    assert_eq!(run::<i64>("
+        @(
+            val add = (a, b) a + b
+            val fn = (): Any { add }
+
+            fn()(1, 41)
+        )
+    "), 42)
+}
+
 fn run<T>(code: &str) -> T {
     let globals = Globals::new();
 
     let ast = parse(code).expect("Could not parse");
     let mir_module = mir::Compiler::compile_module(ast, &globals).expect("Could not compile");
+
+    println!("Comptime MIR: {:?}", mir_module.comptime_main);
 
     let comptime_state = lir::CompileTimeInterpreter::new(&globals, &mir_module).eval();
     let lir_module = lir::Compiler::compile(&globals, &mir_module, comptime_state);

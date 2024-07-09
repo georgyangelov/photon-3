@@ -36,6 +36,33 @@ pub enum Instruction {
     // TODO: Type conversion operators
     // TODO: Type assertion
 
+    /// Creating a closure struct for a not-yet-compiled function
+    ///
+    /// For example, in the following code we need for the function to be compiled (to LIR)
+    /// at execution time, since we don't know the types of it beforehand:
+    ///
+    ///   @(
+    ///     val SomeType = ...
+    ///     (a: SomeType): SomeType { a }
+    ///   )
+    ///
+    /// In this example it's the same thing because the top-level comptime function gets compiled
+    /// at once:
+    ///
+    ///   @val fn = (
+    ///     (): Int { 42 }
+    ///   )
+    ///
+    /// The `Int` gets executed when the function is run, but it's necessary to be known when
+    /// compiling `(): Int { 42 }` (so that it can be type-checked and compiled to a static LIR).
+    ///
+    /// Because of the above, we need to compile such functions into dynamic closures instead of
+    /// static ones. You can imagine dynamic closures like template functions - they are
+    /// instantiated with the types of the parameters at call time, instead of at definition time.
+    /// The difference with dynamic closures is that the function is instantiated while the code is
+    /// run, because we don't know the usage types ahead of time yet (since we're in comptime code).
+    CreateDynamicClosure(LocalRef, mir::FunctionRef, Vec<Type>, Vec<ValueRef>),
+
     // TODO: Make this a regular struct (once we have types for them) and remove the special-cased
     //       closure-related calls here and below
     /// Creating a closure struct

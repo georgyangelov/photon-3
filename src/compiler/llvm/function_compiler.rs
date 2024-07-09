@@ -59,6 +59,8 @@ impl <'a> FunctionCompiler<'a> {
 
                 lir::Instruction::CompileTimeSet(_, _, _) => panic!("Cannot compile CompileTimeSet"),
 
+                lir::Instruction::CreateDynamicClosure(_, _, _, _) => panic!("Cannot compile CreateDynamicClosure"),
+
                 lir::Instruction::CreateClosure(local_ref, func_ref, value_refs) => {
                     let func_decl = &self.c.function_declarations[func_ref.i];
 
