@@ -1,3 +1,4 @@
+use std::time::Instant;
 use crate::{ast, lir, mir};
 use crate::compiler::llvm;
 use crate::lir::Globals;
@@ -159,18 +160,33 @@ fn test_using_comptime_vars_for_types_in_block() {
 fn run<T>(code: &str) -> T {
     let globals = Globals::new();
 
+    let instant = Instant::now();
     let ast = parse(code).expect("Could not parse");
+    println!("Parse time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
+
+    let instant = Instant::now();
     let mir_module = mir::Compiler::compile_module(ast, &globals).expect("Could not compile");
+    println!("MIR compile time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     // println!("Comptime MIR: {:?}", mir_module.comptime_main);
 
+    let instant = Instant::now();
     let comptime_state = lir::CompileTimeInterpreter::new(&globals, &mir_module).eval();
+    println!("Comptime interpret time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
+
+    let instant = Instant::now();
     let lir_module = lir::Compiler::compile(&globals, &mir_module, comptime_state);
+    println!("LIR compile time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
+
+    let instant = Instant::now();
     let mut jit_compiler = llvm::JITCompiler::new(&lir_module);
 
     let main_fn = jit_compiler.compile();
+    println!("LLVM compile time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
+    let instant = Instant::now();
     let result = unsafe { main_fn() };
+    println!("Run time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     result
 }
