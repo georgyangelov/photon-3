@@ -162,7 +162,7 @@ fn run<T>(code: &str) -> T {
     let ast = parse(code).expect("Could not parse");
     let mir_module = mir::Compiler::compile_module(ast, &globals).expect("Could not compile");
 
-    println!("Comptime MIR: {:?}", mir_module.comptime_main);
+    // println!("Comptime MIR: {:?}", mir_module.comptime_main);
 
     let comptime_state = lir::CompileTimeInterpreter::new(&globals, &mir_module).eval();
     let lir_module = lir::Compiler::compile(&globals, &mir_module, comptime_state);
