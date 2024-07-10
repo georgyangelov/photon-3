@@ -1,12 +1,12 @@
 use crate::ast;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pattern {
     pub value: PatternValue,
     pub location: ast::Location
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PatternValue {
     SpecificValue(ast::AST),
     Binding(Box<str>),
@@ -22,7 +22,7 @@ pub enum PatternValue {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PatternParam {
     pub name: Box<str>,
     pub typ: Pattern,

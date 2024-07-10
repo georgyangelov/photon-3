@@ -1,12 +1,12 @@
 use crate::ast;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AST {
     pub value: Value,
     pub location: ast::Location
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Literal(Literal),
     Block(Vec<AST>),
@@ -46,14 +46,14 @@ pub enum Value {
     CompileTimeExpr(Box<AST>)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub params: Vec<Param>,
     pub body: Box<AST>,
     pub return_type: Option<Box<AST>>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Int(i64),
     Bool(bool),
@@ -61,14 +61,14 @@ pub enum Literal {
     String(Box<str>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Param {
     pub name: Box<str>,
     pub typ: Option<ast::Pattern>,
     pub location: ast::Location
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeParam {
     pub name: Box<str>,
     pub typ: AST,
