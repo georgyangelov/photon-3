@@ -157,6 +157,32 @@ fn test_using_comptime_vars_for_types_in_block() {
     "), 42)
 }
 
+// #[test]
+// fn test_struct_defs_using_methods() {
+//     assert_eq!(run::<i64>("
+//         @val Person = Compiler.define_struct \"Person\", {
+//           define \"age\", Int
+//           define \"height\", Float
+//         }
+//
+//         val person = Person.new(42, 42.0)
+//         person.age
+//     "), 42)
+// }
+//
+// #[test]
+// fn test_struct_defs() {
+//     assert_eq!(run::<i64>("
+//         struct Person {
+//           def age: Int
+//           def height: Float
+//         }
+//
+//         val person = Person.new(42, 42.0)
+//         person.age
+//     "), 42)
+// }
+
 fn run<T>(code: &str) -> T {
     let globals = Globals::new();
 
