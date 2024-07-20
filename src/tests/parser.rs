@@ -44,6 +44,7 @@ fn test_assignment() {
     assert_parse("val a = 5 * 5", "(let a (* 5 5))");
 }
 
+// TODO: Remove this, we don't need this
 #[test]
 fn test_recursive_assignment() {
     assert_parse("rec val a = 15", "(let-rec a 15)");
@@ -265,6 +266,12 @@ fn test_specific_value_patterns_in_parameter_types() {
 fn test_type_annotation_on_fn_return_type() {
     assert_parse("(a: Int): Int { a + 1 }", "(fn [(param a Int)] Int (+ a 1))");
     assert_parse("(a: Int): Int a + 1", "(fn [(param a Int)] Int (+ a 1))");
+}
+
+#[test]
+fn test_compile_time_parameters() {
+    assert_parse("(@a): Int { a + 1 }", "(fn [(@param a)] Int (+ a 1))");
+    assert_parse("(@a: Int): Int { a + 1 }", "(fn [(@param a Int)] Int (+ a 1))");
 }
 
 #[test]

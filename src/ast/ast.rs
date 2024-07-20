@@ -64,6 +64,7 @@ pub enum Literal {
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: Box<str>,
+    pub comptime: bool,
     pub typ: Option<ast::Pattern>,
     pub location: ast::Location
 }

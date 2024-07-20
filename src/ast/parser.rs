@@ -748,6 +748,13 @@ impl <I: Iterator<Item = char>> Parser<I> {
         let has_params = self.t.value != CloseParen;
         if has_params {
             loop {
+                let comptime = if self.t.value == At {
+                    // A comptime parameter
+                    self.read()?; // @
+
+                    true
+                } else { false };
+
                 let (name, name_location) = self.read_name("Expected parameter name")?;
 
                 let typ = if self.t.value == Colon {
@@ -762,6 +769,7 @@ impl <I: Iterator<Item = char>> Parser<I> {
 
                 params.push(Param {
                     name,
+                    comptime,
                     typ,
                     location: name_location.extend(&self.last_location)
                 });

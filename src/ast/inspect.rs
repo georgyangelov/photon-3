@@ -32,9 +32,11 @@ impl Display for Value {
                         write!(f, " ")?;
                     }
 
+                    let comptime = if param.comptime { "@" } else { "" };
+
                     match &param.typ {
-                        &None => write!(f, "(param {})", param.name)?,
-                        &Some(ref typ) => write!(f, "(param {} {})", param.name, typ)?
+                        &None => write!(f, "({}param {})", comptime, param.name)?,
+                        &Some(ref typ) => write!(f, "({}param {} {})", comptime, param.name, typ)?
                     };
                 }
 
