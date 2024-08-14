@@ -29,6 +29,7 @@ pub struct Param {
     /// The name it's referenced by
     pub name: String,
 
+    /// Is this a comptime param?
     pub comptime: bool
 }
 
@@ -55,14 +56,6 @@ impl StackFrame {
 
         LocalRef { i, comptime }
     }
-
-    // pub fn define_param(&mut self, name: String) -> ParamRef {
-    //     let i = self.params.len();
-    //
-    //     self.params.push(Param { name });
-    //
-    //     ParamRef { i }
-    // }
 
     pub fn define_capture(&mut self, from: CaptureFrom, name: String) -> CaptureRef {
         let i = self.captures.len();
