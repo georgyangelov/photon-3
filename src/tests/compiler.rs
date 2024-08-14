@@ -149,7 +149,7 @@ fn test_comptime_dynamic_closures() {
 fn test_using_comptime_vars_for_types_in_block() {
     assert_eq!(run::<i64>("
         @(
-            @val myInt = Int
+            val myInt = Int
             val add = (a: myInt, b: myInt): myInt a + b
 
             add(1, 41)

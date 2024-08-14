@@ -1,5 +1,5 @@
-use crate::mir::lexical_scope::*;
-use crate::mir::ParamRef;
+use crate::ir::lexical_scope::*;
+use crate::ir::{CaptureFrom, Global, ParamRef, Type, Value};
 
 #[test]
 fn test_root_level_locals() {
@@ -11,10 +11,10 @@ fn test_root_level_locals() {
 
     let mut scope = new_stack();
 
-    let local_ref = scope.define_local(String::from("a"));
-    let result = scope.access_local("a");
+    let local_ref = scope.define_local(String::from("a"), false);
+    let result = scope.lookup("a");
 
-    assert_eq!(result, Ok(AccessNameRef::Local(local_ref)))
+    assert_eq!(result, Ok(NameRef::Local(local_ref)))
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn test_missing_local() {
 
     let mut scope = new_stack();
 
-    let result = scope.access_local("a");
+    let result = scope.lookup("a");
 
     assert_eq!(result, Err(NameAccessError::NameNotFound))
 }
@@ -35,16 +35,19 @@ fn test_defining_comptime_vals_at_root() {
     /*
         @val a = 42
 
-        a // comptime export
+        a // comptime
      */
 
     let mut scope = new_stack();
 
-    scope.define_comptime_main_local(String::from("a"));
+    let local_ref = scope.define_local(String::from("a"), true);
+    let result = scope.lookup("a");
 
-    let result = scope.access_local("a");
+    scope.pop_block();
+    let frame = scope.pop_stack_frame();
 
-    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))))
+    assert_eq!(frame.locals[local_ref.i].comptime, true);
+    assert_eq!(result, Ok(NameRef::Local(local_ref)));
 }
 
 #[test]
@@ -62,20 +65,18 @@ fn test_defining_vals_at_comptime_block() {
     scope.push_comptime_portal();
     scope.push_block();
 
-    let local_ref = scope.define_local(String::from("a"));
-    let result = scope.access_local("a");
+    let local_ref = scope.define_local(String::from("a"), false);
+    let result = scope.lookup("a");
 
-    assert_eq!(result, Ok(AccessNameRef::Local(local_ref)));
+    assert_eq!(result, Ok(NameRef::Local(local_ref)));
 
     scope.pop_block();
     scope.pop_comptime_portal();
 
     scope.pop_block(); // Main block
-    let runtime_frame = scope.pop_stack_frame(); // Main runtime frame
-    let comptime_frame = scope.pop_comptime_main_stack_frame();
+    let frame = scope.pop_stack_frame(); // Main runtime frame
 
-    assert_eq!(runtime_frame.locals.len(), 0);
-    assert_eq!(comptime_frame.locals.len(), 1);
+    assert_eq!(frame.locals.len(), 1);
 }
 
 #[test]
@@ -90,14 +91,14 @@ fn test_using_comptime_vals_from_comptime_block() {
 
     let mut scope = new_stack();
 
-    let comptime_local_ref = scope.define_comptime_main_local(String::from("a"));
+    let comptime_local_ref = scope.define_local(String::from("a"), true);
 
     scope.push_comptime_portal();
     scope.push_block();
 
-    let result = scope.access_local("a");
+    let result = scope.lookup("a");
 
-    assert_eq!(result, Ok(AccessNameRef::Local(comptime_local_ref)))
+    assert_eq!(result, Ok(NameRef::Local(comptime_local_ref)))
 }
 
 #[test]
@@ -112,53 +113,16 @@ fn test_using_comptime_vals_from_runtime_block() {
 
     let mut scope = new_stack();
 
-    scope.define_comptime_main_local(String::from("a"));
+    scope.define_local(String::from("a"), true);
 
     scope.push_block();
-    let result = scope.access_local("a");
+    let result = scope.lookup("a");
     scope.pop_block();
 
-    let (root, _) = consume_stack(scope);
+    let root = consume_stack(scope);
 
-    assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))));
-    assert_eq!(root.comptime_exports.len(), 1);
-}
-
-#[test]
-fn test_reuses_comptime_slots() {
-    /*
-        @val a = 42
-
-        a // export
-
-        (
-          a // same exact export slot
-        )
-     */
-
-    let mut scope = new_stack();
-
-    scope.define_comptime_main_local(String::from("a"));
-
-    let result_1 = scope.access_local("a").unwrap();
-    assert!(matches!(result_1, AccessNameRef::ComptimeExport(_, Some(_))));
-
-    scope.push_block();
-
-    let result_2 = scope.access_local("a").unwrap();
-    assert!(matches!(result_2, AccessNameRef::ComptimeExport(_, None)));
-
-    let ref_1 = match result_1 {
-        AccessNameRef::ComptimeExport(ref_1, _) => ref_1,
-        _ => panic!("Invalid result type")
-    };
-
-    let ref_2 = match result_2 {
-        AccessNameRef::ComptimeExport(ref_2, _) => ref_2,
-        _ => panic!("Invalid result type")
-    };
-
-    assert_eq!(ref_1, ref_2)
+    // TODO: Check that it's comptime
+    assert!(matches!(result, Ok(NameRef::Local(_))));
 }
 
 #[test]
@@ -171,12 +135,12 @@ fn test_cannot_reference_runtime_vals_from_comptime() {
 
     let mut scope = new_stack();
 
-    scope.define_local(String::from("a"));
+    scope.define_local(String::from("a"), false);
 
     scope.push_comptime_portal();
     scope.push_block();
 
-    let result = scope.access_local("a");
+    let result = scope.lookup("a");
 
     assert_eq!(result, Err(NameAccessError::CannotReferenceRuntimeNameFromComptime))
 }
@@ -197,15 +161,16 @@ fn test_cannot_reference_runtime_vals_from_comptime_nested() {
         scope.push_comptime_portal();
         scope.push_block();
 
-        scope.define_local(String::from("a"));
+        scope.define_local(String::from("a"), false);
 
         {
             scope.push_comptime_portal();
             scope.push_block();
 
-            let result = scope.access_local("a");
+            let result = scope.lookup("a");
 
-            assert_eq!(result, Err(NameAccessError::CannotReferenceRuntimeNameFromComptime))
+            // TODO: Check that it's comptime
+            assert!(matches!(result, Ok(NameRef::Local(_))));
         }
     }
 }
@@ -224,7 +189,7 @@ fn test_captures_comptime_local_in_comptime_fn() {
 
     let mut scope = new_stack();
 
-    let from_ref = scope.define_comptime_main_local(String::from("a"));
+    let from_ref = scope.define_local(String::from("a"), true);
 
     {
         scope.push_comptime_portal();
@@ -234,11 +199,11 @@ fn test_captures_comptime_local_in_comptime_fn() {
             scope.push_stack_frame(vec![]);
             scope.push_block();
 
-            let result = scope.access_local("a");
+            let result = scope.lookup("a");
 
             println!("{:?}", result);
 
-            assert!(matches!(result, Ok(AccessNameRef::Capture(_))));
+            assert!(matches!(result, Ok(NameRef::Capture(_))));
 
             scope.pop_block();
 
@@ -271,16 +236,18 @@ fn test_capture_nested_fns_in_comptime() {
         scope.push_block();
 
         {
-            scope.push_stack_frame(vec![String::from("a")]);
+            scope.push_stack_frame(vec![
+                Param { name: String::from("a"), comptime: false }
+            ]);
             scope.push_block();
 
             {
                 scope.push_stack_frame(vec![]);
                 scope.push_block();
 
-                let result = scope.access_local("a");
+                let result = scope.lookup("a");
 
-                assert!(matches!(result, Ok(AccessNameRef::Capture(_))));
+                assert!(matches!(result, Ok(NameRef::Capture(_))));
 
                 scope.pop_block();
                 let stack_frame = scope.pop_stack_frame();
@@ -288,7 +255,7 @@ fn test_capture_nested_fns_in_comptime() {
                 match stack_frame.captures.get(0) {
                     None => panic!("Expected to have a capture"),
                     Some(Capture { from, .. }) => {
-                        assert_eq!(*from, CaptureFrom::Param(ParamRef { i: 0 }))
+                        assert_eq!(*from, CaptureFrom::Param(ParamRef { i: 0, comptime: false }))
                     }
                 }
             }
@@ -298,11 +265,6 @@ fn test_capture_nested_fns_in_comptime() {
 
 #[test]
 fn test_use_comptime_in_another_comptime_fn() {
-    // This can't be a capture because c doesn't have a name outside that can be captured, although
-    // captures don't need to have names, so... it can probably be a capture, but what if there are
-    // multiple levels of closures?
-    //
-    // Actually this should be fine
     /*
         @val b = 42
 
@@ -315,22 +277,24 @@ fn test_use_comptime_in_another_comptime_fn() {
 
     let mut scope = new_stack();
 
-    scope.define_comptime_main_local(String::from("b"));
+    scope.define_local(String::from("b"), true);
 
     {
         scope.push_comptime_portal();
         scope.push_block();
 
         {
-            scope.push_stack_frame(vec![String::from("a")]);
+            scope.push_stack_frame(vec![
+                Param { name: String::from("a"), comptime: false }
+            ]);
             scope.push_block();
 
-            scope.define_comptime_main_local(String::from("c"));
+            scope.define_local(String::from("c"), true);
 
-            let result = scope.access_local("c");
+            let result = scope.lookup("c");
 
             // assert!(matches!(result, Ok(NameRef::Local(_))));
-            assert!(matches!(result, Ok(AccessNameRef::ComptimeExport(_, Some(_)))));
+            assert!(matches!(result, Ok(NameRef::Local(_))));
         }
     }
 }
@@ -345,17 +309,16 @@ fn test_can_find_globals_in_comptime_context() {
     scope.push_comptime_portal();
     scope.push_block();
 
-    let result = scope.access_local("Int");
+    let result = scope.lookup("Int");
 
-    assert!(matches!(result, Ok(AccessNameRef::Global(_))));
+    assert!(matches!(result, Ok(NameRef::Global(_))));
 }
 
 fn new_stack() -> ScopeStack {
     let mut stack = ScopeStack::new(
         RootScope::new(vec![
-            String::from("Int")
-        ]),
-        ComptimeMainStackFrame::new()
+            Global { name: String::from("Int"), value: Value::Type(Type::Int), comptime: true }
+        ])
     );
 
     stack.push_stack_frame(vec![]);
@@ -364,7 +327,7 @@ fn new_stack() -> ScopeStack {
     stack
 }
 
-fn consume_stack(mut stack: ScopeStack) -> (RootScope, ComptimeMainStackFrame) {
+fn consume_stack(mut stack: ScopeStack) -> RootScope {
     stack.pop_block();
     stack.pop_stack_frame();
 

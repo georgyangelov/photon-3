@@ -1,4 +1,5 @@
 mod lexer;
 mod parser;
-mod scope;
+mod old_scope;
 mod compiler;
+mod scope;
