@@ -1,28 +1,56 @@
+use std::collections::{HashMap, HashSet};
 use crate::ast;
-use crate::ir::Value;
+use crate::ir::{Type, Value};
 
 #[derive(Debug)]
-pub struct Module {
+pub struct PreComptimeModule {
+    pub functions: Vec<FunctionTemplate>,
+    pub main: FunctionTemplate
+}
+
+#[derive(Debug)]
+pub struct PostComptimeModule {
     pub functions: Vec<Function>,
     pub main: Function
 }
 
 #[derive(Debug)]
-pub struct Function {
-    pub captures: Vec<Capture>,
+pub struct FunctionTemplate {
+    pub captures: Vec<CaptureTemplate>,
     pub params: Vec<Param>,
     pub return_type: Option<IR>,
+    pub locals_comptime: Vec<bool>,
+    pub body: IR
+}
+
+#[derive(Debug)]
+pub struct Function {
+    // TODO: Replace with something more performant for small arrays
+    pub captures: HashMap<CaptureRef, RuntimeCapture>,
+    pub locals: HashMap<LocalRef, Type>,
+    pub param_types: HashMap<ParamRef, Type>,
+    pub return_type: Type,
     pub body: IR
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Capture {
-    pub from: CaptureFrom
+pub struct CaptureTemplate {
+    pub from: CaptureFrom,
+    pub comptime: bool
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuntimeCapture {
+    pub from: CaptureFrom,
+    pub typ: Type
 }
 
 #[derive(Debug)]
 pub struct Param {
-    pub param_ref: ParamRef
+    // TODO: Do we need this?
+    // pub param_ref: ParamRef,
+    pub typ: Option<Box<IR>>,
+    pub comptime: bool
 }
 
 #[derive(Debug)]
@@ -40,10 +68,12 @@ pub enum Node {
     GlobalRef(GlobalRef),
     ParamRef(ParamRef),
     LocalRef(LocalRef),
+    CaptureRef(CaptureRef),
 
     LocalSet(LocalRef, Box<IR>),
 
     Block(Vec<IR>),
+    Comptime(Box<IR>),
 
     Call(Box<str>, Box<IR>, Vec<IR>),
     CreateClosure(FunctionRef, Vec<CaptureFrom>),

@@ -9,8 +9,9 @@ mod llvm_test;
 mod llvm_test_2;
 mod lir;
 mod types;
-mod compiler;
+mod old_compiler;
 mod ir;
+mod compiler;
 
 fn main() {
     unsafe { llvm_test() }

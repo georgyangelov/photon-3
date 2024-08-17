@@ -119,7 +119,6 @@ impl ScopeStack {
                     match scope.find_global(name) {
                         None => {}
                         Some(global_ref) => {
-                            // TODO: Allow some globals to be comptime-only?
                             result = Some(NameRef::Global(global_ref));
                             break
                         }

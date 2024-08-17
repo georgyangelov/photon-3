@@ -1,8 +1,8 @@
 use std::ffi::{c_uint, CString};
 use llvm_sys::prelude::*;
 use llvm_sys::core::*;
-use crate::compiler::llvm::compiler_module_context::{CompilerModuleContext, FunctionDeclaration};
-use crate::compiler::llvm::symbol_name_counter::SymbolNameCounter;
+use crate::old_compiler::llvm::compiler_module_context::{CompilerModuleContext, FunctionDeclaration};
+use crate::old_compiler::llvm::symbol_name_counter::SymbolNameCounter;
 use crate::lir;
 use crate::types::IntrinsicFn;
 

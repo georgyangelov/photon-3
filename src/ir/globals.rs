@@ -4,6 +4,7 @@ pub struct Globals {
     pub globals: Vec<Global>
 }
 
+#[derive(Debug, Clone)]
 pub struct Global {
     pub name: String,
     pub value: Value,

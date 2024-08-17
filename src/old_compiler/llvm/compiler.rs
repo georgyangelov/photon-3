@@ -8,9 +8,9 @@ use llvm_sys::orc2::lljit::*;
 use llvm_sys::target::*;
 use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
-use crate::compiler::llvm::c_str;
-use crate::compiler::llvm::compiler_module_context::CompilerModuleContext;
-use crate::compiler::llvm::function_compiler::FunctionCompiler;
+use crate::old_compiler::llvm::c_str;
+use crate::old_compiler::llvm::compiler_module_context::CompilerModuleContext;
+use crate::old_compiler::llvm::function_compiler::FunctionCompiler;
 use crate::lir;
 
 pub struct JITCompiler<'a> {
