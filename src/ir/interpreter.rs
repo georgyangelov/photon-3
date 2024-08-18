@@ -1,23 +1,29 @@
-use std::collections::HashMap;
 use crate::ir;
 use crate::ir::{Globals, Type, Value};
+use crate::vec_map::VecMap;
 
 pub struct Interpreter<'a> {
     globals: &'a Globals,
-    functions: Vec<ir::Function>
+    functions: Vec<ir::RFunction>
 }
 
 struct ComptimeStackFrame {
-    arg_types: Vec<Type>,
-    args: Vec<Option<Value>>,
+    // TODO: Optimization for the lookups of these VecMaps here?
+    param_types: VecMap<ir::ParamRef, Type>,
+    comptime_param_values: VecMap<ir::ParamRef, Value>,
 
-    capture_types: Vec<Type>,
-    captures: Vec<Option<Value>>,
+    capture_types: VecMap<ir::CaptureRef, Type>,
+    comptime_capture_values: VecMap<ir::CaptureRef, Value>,
 
-    local_types: Vec<Option<Type>>,
-    locals: Vec<Option<Value>>,
+    local_types: VecMap<ir::LocalRef, StackFrameType>,
+    comptime_local_values: VecMap<ir::LocalRef, Value>,
 
     return_type: Option<Type>
+}
+
+struct StackFrameType {
+    typ: Type,
+    comptime: bool
 }
 
 impl <'a> Interpreter<'a> {
@@ -28,10 +34,10 @@ impl <'a> Interpreter<'a> {
         };
         let main = interpreter.specialize_function(
             module.main,
-            vec![],
-            vec![],
-            vec![],
-            vec![]
+            VecMap::new(),
+            VecMap::new(),
+            VecMap::new(),
+            VecMap::new()
         );
 
         ir::PostComptimeModule {
@@ -42,32 +48,29 @@ impl <'a> Interpreter<'a> {
 
     fn specialize_function(
         &mut self,
+
         // TODO: Pass a closure here instead of raw FunctionTemplate, we need the types for the
         //       specialization
-        func: ir::FunctionTemplate,
-        arg_types: Vec<Type>,
-        args: Vec<Option<Value>>,
-        capture_types: Vec<Type>,
-        captures: Vec<Option<Value>>
-    ) -> ir::Function {
+        func: ir::TFunction,
+
+        param_types: VecMap<ir::ParamRef, Type>,
+        comptime_param_values: VecMap<ir::ParamRef, Value>,
+
+        capture_types: VecMap<ir::CaptureRef, Type>,
+        comptime_capture_values: VecMap<ir::CaptureRef, Value>
+    ) -> ir::RFunction {
         // TODO: If the function body resolves to a constant - return that constant directly
         //       instead of wrapping in a function?
 
-        let mut locals = Vec::new();
-        locals.resize(func.locals_comptime.len(), None);
-
-        let mut local_types = Vec::new();
-        local_types.resize(locals.len(), None);
-
         let mut stack_frame = ComptimeStackFrame {
-            arg_types,
-            args,
+            param_types,
+            comptime_param_values,
 
             capture_types,
-            captures,
+            comptime_capture_values,
 
-            local_types,
-            locals,
+            local_types: VecMap::new(),
+            comptime_local_values: VecMap::new(),
 
             return_type: None
         };
@@ -95,40 +98,41 @@ impl <'a> Interpreter<'a> {
             }
         };
 
-        let mut runtime_captures = HashMap::new();
-        for (i, capture) in func.captures.iter().enumerate() {
-            if !capture.comptime {
-                runtime_captures.insert(
-                    ir::CaptureRef { i, comptime: false },
-                    ir::RuntimeCapture { from: capture.from, typ: stack_frame.capture_types[i] }
-                );
-            }
-        }
-
-        let mut runtime_locals = HashMap::new();
-        for (i, local_comptime) in func.locals_comptime.iter().enumerate() {
-            if !local_comptime {
-                runtime_locals.insert(
-                    ir::LocalRef { i, comptime: false },
-                    stack_frame.local_types[i].expect("Missing type information for local")
-                );
-            }
-        }
-
-        let mut runtime_arg_types = HashMap::new();
-        for (i, param) in func.params.iter().enumerate() {
+        let mut rparams = VecMap::new();
+        for (param_ref, param) in func.params.iter() {
             if !param.comptime {
-                runtime_arg_types.insert(
-                    ir::ParamRef { i, comptime: false },
-                    stack_frame.arg_types[i]
-                );
+                rparams.insert_push(*param_ref, ir::RParam {
+                    // TODO: Yuck
+                    typ: *stack_frame.param_types.get(param_ref).unwrap()
+                });
             }
         }
 
-        ir::Function {
-            captures: runtime_captures,
-            locals: runtime_locals,
-            param_types: runtime_arg_types,
+        // TODO: Is this correct or do we need to determine those dynamically as we scan the IR?
+        let mut rcaptures = VecMap::new();
+        for (capture_ref, capture) in func.captures.iter() {
+            if !capture.comptime {
+                rcaptures.insert_push(*capture_ref, ir::RCapture {
+                    from: capture.from,
+                    // TODO: Yuck
+                    typ: *stack_frame.capture_types.get(capture_ref).unwrap()
+                });
+            }
+        }
+
+        let mut rlocals = VecMap::new();
+        for (local_ref, local) in stack_frame.local_types.iter() {
+            if !local.comptime {
+                rlocals.insert_push(*local_ref, ir::RLocal {
+                    typ: local.typ
+                });
+            }
+        }
+
+        ir::RFunction {
+            captures: rcaptures,
+            locals: rlocals,
+            params: rparams,
             return_type,
             body: runtime_body
         }
@@ -178,7 +182,7 @@ impl <'a> Interpreter<'a> {
                     ir::Node::ParamRef(*param_ref)
                 };
 
-                (ir, frame.arg_types[param_ref.i])
+                (ir, *frame.param_types.get(param_ref).expect("Missing param type"))
             }
             ir::Node::LocalRef(local_ref) => {
                 let ir = if local_ref.comptime {
@@ -188,7 +192,7 @@ impl <'a> Interpreter<'a> {
                     ir::Node::LocalRef(*local_ref)
                 };
 
-                (ir, frame.local_types[local_ref.i].expect("Used param before definition"))
+                (ir, frame.local_types.get(local_ref).expect("Used param before definition").typ)
             }
             ir::Node::CaptureRef(capture_ref) => {
                 let ir = if capture_ref.comptime {
@@ -198,7 +202,7 @@ impl <'a> Interpreter<'a> {
                     ir::Node::CaptureRef(*capture_ref)
                 };
 
-                (ir, frame.capture_types[capture_ref.i])
+                (ir, *frame.capture_types.get(capture_ref).expect("Missing capture type"))
             }
             ir::Node::LocalSet(local_ref, value_ir) => {
                 let (value, typ) = self.eval_ir(frame, value_ir, local_ref.comptime);
@@ -210,7 +214,10 @@ impl <'a> Interpreter<'a> {
                     ir::Node::LocalSet(*local_ref, Box::new(value))
                 };
 
-                frame.local_types[local_ref.i] = Some(typ);
+                frame.local_types.insert(*local_ref, StackFrameType {
+                    typ,
+                    comptime: local_ref.comptime
+                });
 
                 (ir, typ)
             }
@@ -238,11 +245,14 @@ impl <'a> Interpreter<'a> {
                 // evaluated
                 (ir::Node::Constant(result_ir), result_typ)
             },
-            ir::Node::Call(name, target, args) => {
+            ir::Node::DynamicCall(name, target, args) => {
                 todo!("Eval argument types, lookup function based on target name, specialize it")
             }
-            ir::Node::CreateClosure(func_ref, captures) => {
+            ir::Node::DynamicCreateClosure(func_ref, captures) => {
                 todo!("Support CreateClosure in the interpreter")
+            }
+            ir::Node::StaticCall(_, _) => {
+                todo!("Support 'StaticCall' in the interpreter?")
             }
             ir::Node::If(_, _, _) => {
                 todo!("Support 'if' in the interpreter")

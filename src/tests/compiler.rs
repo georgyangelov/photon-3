@@ -24,9 +24,9 @@ fn run<T>(code: &str) -> T {
     println!("Comptime interpret time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     let instant = Instant::now();
-    let mut jit_compiler = compiler::JITCompiler::new(&module);
+    let mut jit_compiler = compiler::JITCompiler::new();
 
-    let main_fn = jit_compiler.compile();
+    let main_fn = jit_compiler.compile(&module);
     println!("LLVM compile time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     let instant = Instant::now();

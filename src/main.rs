@@ -12,6 +12,8 @@ mod types;
 mod old_compiler;
 mod ir;
 mod compiler;
+mod ref_registry;
+mod vec_map;
 
 fn main() {
     unsafe { llvm_test() }

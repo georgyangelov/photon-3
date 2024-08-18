@@ -10,7 +10,7 @@ pub enum Type {
     Type,
 
     // TODO: We'll also need an interface type for functions which the closures can be assigned to
-    Closure(ir::FunctionRef)
+    Closure(ir::FunctionTemplateRef)
 
     // TODO
     // Struct(ArenaRef<StructType>),

@@ -1,9 +1,10 @@
 use crate::{ast, ir};
 use crate::ir::{Globals, Value};
 use crate::ir::lexical_scope::{NameAccessError, NameRef, RootScope, ScopeStack};
+use crate::vec_map::VecMap;
 
 pub struct Builder {
-    pub functions: Vec<ir::FunctionTemplate>
+    pub functions: Vec<ir::TFunction>
 }
 
 impl Builder {
@@ -33,7 +34,7 @@ impl Builder {
         }
     }
 
-    fn build_function(&mut self, scope: &mut ScopeStack, ast: ast::Function) -> ir::FunctionTemplate {
+    fn build_function(&mut self, scope: &mut ScopeStack, ast: ast::Function) -> ir::TFunction {
         let param_count = ast.params.len();
 
         let mut scope_params = Vec::with_capacity(param_count);
@@ -46,8 +47,10 @@ impl Builder {
 
         scope.push_stack_frame(scope_params);
 
-        let mut params = Vec::with_capacity(param_count);
-        for param in ast.params {
+        let mut params = VecMap::with_capacity(param_count);
+        for (i, param) in ast.params.into_iter().enumerate() {
+            let param_ref = ir::ParamRef { i, comptime: param.comptime };
+
             // TODO: Do we need this block to be here?
             scope.push_block();
 
@@ -63,7 +66,7 @@ impl Builder {
 
             scope.pop_block();
 
-            params.push(ir::Param {
+            params.insert_push(param_ref, ir::TParam {
                 typ: param_type,
                 comptime: param.comptime
             });
@@ -81,20 +84,28 @@ impl Builder {
         scope.pop_block();
         let stack_frame = scope.pop_stack_frame();
 
-        let mut captures = Vec::with_capacity(stack_frame.captures.len());
-        for capture in stack_frame.captures {
-            captures.push(ir::CaptureTemplate {
+        let mut captures = VecMap::with_capacity(stack_frame.captures.len());
+        for (i, capture) in stack_frame.captures.into_iter().enumerate() {
+            // TODO: Do we need for these refs to have their own `comptime`?
+            let capture_ref = ir::CaptureRef { i, comptime: capture.comptime };
+
+            captures.insert_push(capture_ref, ir::TCapture {
                 from: capture.from,
                 comptime: capture.comptime
             });
         }
 
-        let mut locals_comptime = Vec::with_capacity(stack_frame.locals.len());
-        for local in stack_frame.locals {
-            locals_comptime.push(local.comptime);
+        let mut locals = VecMap::with_capacity(stack_frame.locals.len());
+        for (i, local) in stack_frame.locals.iter().enumerate() {
+            // TODO: Maybe the `lexical_scope` should be creating those Refs
+            let local_ref = ir::LocalRef { i, comptime: local.comptime };
+
+            locals.insert_push(local_ref, ir::TLocal {
+                comptime: local.comptime
+            });
         }
 
-        ir::FunctionTemplate { captures, params, return_type, locals_comptime, body }
+        ir::TFunction { captures, params, return_type, locals, body }
     }
 
     fn build_ir(&mut self, scope: &mut ScopeStack, ast: ast::AST) -> ir::IR {
@@ -157,17 +168,17 @@ impl Builder {
 
             ast::Value::Function(func) => {
                 let func_ir = self.build_function(scope, func);
-                let func_ref = ir::FunctionRef { i: self.functions.len() };
+                let func_ref = ir::FunctionTemplateRef { i: self.functions.len() };
                 let captures = func_ir.captures.clone();
 
                 self.functions.push(func_ir);
 
-                let mut to_capture = Vec::with_capacity(captures.len());
-                for capture in captures {
-                    to_capture.push(capture.from);
+                let mut to_capture = VecMap::with_capacity(captures.len());
+                for (capture_ref, capture) in captures.iter() {
+                    to_capture.insert_push(*capture_ref, capture.from);
                 }
 
-                ir::Node::CreateClosure(func_ref, to_capture)
+                ir::Node::DynamicCreateClosure(func_ref, to_capture)
             }
 
             ast::Value::Call { name, target, args } => {
@@ -199,7 +210,7 @@ impl Builder {
                     args_ir.push(ir);
                 }
 
-                ir::Node::Call(name, Box::new(target_ir), args_ir)
+                ir::Node::DynamicCall(name, Box::new(target_ir), args_ir)
             }
 
             ast::Value::If { condition, on_true, on_false } => {

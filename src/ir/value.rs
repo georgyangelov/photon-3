@@ -11,7 +11,7 @@ pub enum Value {
     Type(Type),
 
     // PERFORMANCE: Potential to optimize performance by packing this?
-    Closure(ir::FunctionRef, Rc<Vec<Value>>)
+    Closure(ir::FunctionTemplateRef, Rc<Vec<Value>>)
 }
 
 impl Value {
@@ -50,7 +50,7 @@ impl Value {
         }
     }
 
-    pub fn assert_closure(&self) -> (ir::FunctionRef, &Vec<Value>) {
+    pub fn assert_closure(&self) -> (ir::FunctionTemplateRef, &Vec<Value>) {
         match self {
             Value::Closure(func_ref, value) => (*func_ref, value.as_ref()),
             _ => panic!("Invalid value: expected Closure, got {:?}", self)
