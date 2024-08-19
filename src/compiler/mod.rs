@@ -1,6 +1,7 @@
 mod compiler;
 mod function_builder;
 mod jit_compiler;
+mod symbol_name_counter;
 
 pub use jit_compiler::*;
 

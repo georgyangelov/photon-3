@@ -203,7 +203,7 @@ impl Builder {
                     Some(target) => (self.build_ir(scope, *target), name)
                 };
 
-                let mut args_ir = Vec::new();
+                let mut args_ir = Vec::with_capacity(args.len());
                 for arg in args {
                     let ir = self.build_ir(scope, arg);
 

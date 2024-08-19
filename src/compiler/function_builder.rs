@@ -2,8 +2,9 @@ use std::ffi::CString;
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
 use crate::compiler::compiler::FunctionDeclaration;
+use crate::compiler::symbol_name_counter::SymbolNameCounter;
 use crate::ir;
-use crate::ir::Value;
+use crate::ir::{IntrinsicFn, Value};
 use crate::vec_map::VecMap;
 
 pub struct FunctionBuilder<'a> {
@@ -13,7 +14,9 @@ pub struct FunctionBuilder<'a> {
     decl: &'a FunctionDeclaration,
     func: &'a ir::RFunction,
 
-    local_refs: VecMap<ir::LocalRef, LLVMValueRef>
+    local_refs: VecMap<ir::LocalRef, LLVMValueRef>,
+
+    stmt_name_gen: SymbolNameCounter
 }
 
 impl <'a> FunctionBuilder<'a> {
@@ -32,7 +35,9 @@ impl <'a> FunctionBuilder<'a> {
             decl,
             func,
 
-            local_refs: VecMap::with_capacity(func.locals.len())
+            local_refs: VecMap::with_capacity(func.locals.len()),
+
+            stmt_name_gen: SymbolNameCounter::new()
         };
 
         fb.compile();
@@ -88,9 +93,28 @@ impl <'a> FunctionBuilder<'a> {
             ir::Node::Comptime(_) => panic!("Cannot compile comptime blocks"),
             ir::Node::DynamicCall(_, _, _) => panic!("Cannot compile dynamic calls"),
             ir::Node::DynamicCreateClosure(_, _) => panic!("Cannot compile dynamic closures"),
+            ir::Node::StaticCallIntrinsic(intrinsic, args) => {
+                let args = self.compile_values(args, builder);
+                let name = self.stmt_name_gen.next("result");
+
+                match intrinsic {
+                    IntrinsicFn::AddInt => LLVMBuildAdd(builder, args[0], args[1], name.as_ptr())
+                }
+            }
             ir::Node::StaticCall(_, _) => todo!("Support calls"),
             ir::Node::If(_, _, _) => todo!("Support ifs")
         }
+    }
+
+    unsafe fn compile_values(&mut self, irs: &Vec<ir::IR>, builder: LLVMBuilderRef) -> Vec<LLVMValueRef> {
+        let mut values = Vec::with_capacity(irs.len());
+        for ir in irs {
+            let value = self.compile_ir(ir, builder);
+
+            values.push(value);
+        }
+
+        values
     }
 
     unsafe fn const_lir_value(&self, ir_value: &Value) -> LLVMValueRef {

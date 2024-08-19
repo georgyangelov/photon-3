@@ -27,3 +27,12 @@ pub struct FunctionSignature {
     pub params: Vec<Type>,
     pub returns: Type
 }
+
+// PERFORMANCE: Optimize to not create new objects every time
+impl IntrinsicFn {
+    pub fn signature(&self, _arg_types: &[Type]) -> FunctionSignature {
+        match self {
+            IntrinsicFn::AddInt => FunctionSignature { params: vec![Type::Int, Type::Int], returns: Type::Int }
+        }
+    }
+}

@@ -26,6 +26,16 @@ fn test_comptime_vals() {
     "), 42)
 }
 
+#[test]
+fn test_add() {
+    assert_eq!(run::<i64>("
+        val a = 41
+        val b = 1
+
+        a + b
+    "), 42);
+}
+
 fn run<T>(code: &str) -> T {
     let globals = Globals::new();
 

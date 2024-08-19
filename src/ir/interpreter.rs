@@ -10,13 +10,13 @@ pub struct Interpreter<'a> {
 struct ComptimeStackFrame {
     // TODO: Optimization for the lookups of these VecMaps here?
     param_types: VecMap<ir::ParamRef, Type>,
-    comptime_param_values: VecMap<ir::ParamRef, Value>,
+    param_values: VecMap<ir::ParamRef, Value>,
 
     capture_types: VecMap<ir::CaptureRef, Type>,
-    comptime_capture_values: VecMap<ir::CaptureRef, Value>,
+    capture_values: VecMap<ir::CaptureRef, Value>,
 
     local_types: VecMap<ir::LocalRef, StackFrameType>,
-    comptime_local_values: VecMap<ir::LocalRef, Value>,
+    local_values: VecMap<ir::LocalRef, Value>,
 
     return_type: Option<Type>
 }
@@ -64,13 +64,13 @@ impl <'a> Interpreter<'a> {
 
         let mut stack_frame = ComptimeStackFrame {
             param_types,
-            comptime_param_values,
+            param_values: comptime_param_values,
 
             capture_types,
-            comptime_capture_values,
+            capture_values: comptime_capture_values,
 
             local_types: VecMap::new(),
-            comptime_local_values: VecMap::new(),
+            local_values: VecMap::new(),
 
             return_type: None
         };
@@ -186,7 +186,7 @@ impl <'a> Interpreter<'a> {
                         todo!("Support specializing Any types");
                     }
 
-                    let value = frame.comptime_local_values.get(local_ref)
+                    let value = frame.local_values.get(local_ref)
                         .expect("Used local before assignment");
 
                     ir::Node::Constant(value.clone())
@@ -216,7 +216,7 @@ impl <'a> Interpreter<'a> {
 
                     let value = self.assert_const_value(value);
 
-                    frame.comptime_local_values.insert(*local_ref, value);
+                    frame.local_values.insert(*local_ref, value);
 
                     ir::Node::Nop
                 } else {
@@ -256,10 +256,52 @@ impl <'a> Interpreter<'a> {
                 (ir::Node::Constant(value), result_typ)
             },
             ir::Node::DynamicCall(name, target, args) => {
-                todo!("Eval argument types, lookup function based on target name, specialize it")
+                let (target, target_type) = self.eval_ir(frame, target, in_comptime);
+
+                let mut arg_types = Vec::with_capacity(args.len() + 1);
+                let mut arg_irs = Vec::with_capacity(args.len() + 1);
+
+                // TODO: Remove this clones
+                arg_types.push(target_type.clone());
+                arg_irs.push(target);
+
+                for arg in args {
+                    let (ir, typ) = self.eval_ir(frame, arg, in_comptime);
+
+                    arg_irs.push(ir);
+                    arg_types.push(typ);
+                }
+
+                let resolved_fn = match (target_type, name.as_ref()) {
+                    (Type::Any, _) => panic!("Target type cannot be Any"),
+                    (Type::None, _) => todo!("Support calling functions on None"),
+                    (Type::Bool, _) => todo!("Support calling functions on bools"),
+                    (Type::Int, "+") => ResolvedFn::Intrinsic(ir::IntrinsicFn::AddInt),
+                    (Type::Float, _) => todo!("Support calling functions on floats"),
+                    (Type::Type, _) => todo!("Support calling functions on types"),
+                    (Type::Closure(_), _) => todo!("Support calling functions on closures"),
+                    (typ, name) => panic!("Cannot find function {} on {:?}", name, typ)
+                };
+
+                let signature = match &resolved_fn {
+                    ResolvedFn::Intrinsic(intrinsic) => intrinsic.signature(&arg_types),
+                    ResolvedFn::TFunction(_) => todo!("Support getting signature of TFunctions"),
+                    ResolvedFn::RFunction(_) => todo!("Support getting signature of RFunctions")
+                };
+
+                let node = match resolved_fn {
+                    ResolvedFn::Intrinsic(intrinsic) => ir::Node::StaticCallIntrinsic(intrinsic, arg_irs),
+                    ResolvedFn::TFunction(_) => todo!("Support calling TFunctions"),
+                    ResolvedFn::RFunction(_) => todo!("Support calling RFunctions")
+                };
+
+                (node, signature.returns)
             }
             ir::Node::DynamicCreateClosure(func_ref, captures) => {
                 todo!("Support CreateClosure in the interpreter")
+            }
+            ir::Node::StaticCallIntrinsic(_, _) => {
+                todo!("Support 'StaticCallIntrinsic' in the interpreter")
             }
             ir::Node::StaticCall(_, _) => {
                 todo!("Support 'StaticCall' in the interpreter?")
@@ -271,4 +313,11 @@ impl <'a> Interpreter<'a> {
 
         (ir::IR { node, location }, typ)
     }
+}
+
+#[derive(Clone, Copy)]
+pub enum ResolvedFn {
+    Intrinsic(ir::IntrinsicFn),
+    TFunction(ir::FunctionTemplateRef),
+    RFunction(ir::FunctionRef)
 }

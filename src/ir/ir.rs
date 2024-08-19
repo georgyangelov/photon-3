@@ -1,6 +1,6 @@
 use crate::vec_map::VecMap;
 use crate::ast;
-use crate::ir::{Type, Value};
+use crate::ir::{IntrinsicFn, Type, Value};
 
 #[derive(Debug)]
 pub struct PreComptimeModule {
@@ -91,6 +91,7 @@ pub enum Node {
     DynamicCall(Box<str>, Box<IR>, Vec<IR>),
     DynamicCreateClosure(FunctionTemplateRef, VecMap<CaptureRef, CaptureFrom>),
 
+    StaticCallIntrinsic(IntrinsicFn, Vec<IR>),
     StaticCall(FunctionRef, Vec<IR>),
     // StaticCreateClosure(FunctionRef, Vec<CaptureFrom>),
 
