@@ -7,6 +7,16 @@ fn test_literals() {
     assert_eq!(run::<i64>("42"), 42)
 }
 
+#[test]
+fn test_locals() {
+    assert_eq!(run::<i64>("
+        val a = 42
+        val b = 11
+
+        a
+    "), 42);
+}
+
 fn run<T>(code: &str) -> T {
     let globals = Globals::new();
 

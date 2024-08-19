@@ -4,13 +4,16 @@ use llvm_sys::prelude::*;
 use crate::compiler::compiler::FunctionDeclaration;
 use crate::ir;
 use crate::ir::Value;
+use crate::vec_map::VecMap;
 
 pub struct FunctionBuilder<'a> {
     llvm_context: LLVMContextRef,
     llvm_module: LLVMModuleRef,
 
     decl: &'a FunctionDeclaration,
-    func: &'a ir::RFunction
+    func: &'a ir::RFunction,
+
+    local_refs: VecMap<ir::LocalRef, LLVMValueRef>
 }
 
 impl <'a> FunctionBuilder<'a> {
@@ -27,7 +30,9 @@ impl <'a> FunctionBuilder<'a> {
             llvm_module,
 
             decl,
-            func
+            func,
+
+            local_refs: VecMap::with_capacity(func.locals.len())
         };
 
         fb.compile();
@@ -58,9 +63,15 @@ impl <'a> FunctionBuilder<'a> {
             ir::Node::Constant(value) => self.const_lir_value(value),
             ir::Node::GlobalRef(_) => todo!("Support global refs"),
             ir::Node::ParamRef(_) => todo!("Support param refs"),
-            ir::Node::LocalRef(_) => todo!("Support local refs"),
+            ir::Node::LocalRef(local_ref) => *self.local_refs.get(local_ref).unwrap(),
             ir::Node::CaptureRef(_) => todo!("Support capture refs"),
-            ir::Node::LocalSet(_, _) => todo!("Support local sets"),
+            ir::Node::LocalSet(local_ref, ir) => {
+                let result = self.compile_ir(ir, builder);
+
+                self.local_refs.insert(*local_ref, result);
+
+                self.const_lir_value(&Value::None)
+            }
             ir::Node::Block(irs) => {
                 if irs.len() == 0 {
                     todo!("This shouldn't be possible, right?")
