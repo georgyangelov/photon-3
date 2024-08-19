@@ -80,7 +80,8 @@ impl <'a> Interpreter<'a> {
         let return_type = match &func.return_type {
             None => None,
             Some(ir) => {
-                let (value, _) = self.eval_comptime_ir(&mut stack_frame, ir);
+                let (value, _) = self.eval_ir(&mut stack_frame, ir, true);
+                let value = self.assert_const_value(value);
 
                 Some(match value {
                     Value::Type(typ) => typ,
@@ -138,20 +139,12 @@ impl <'a> Interpreter<'a> {
         }
     }
 
-    fn eval_comptime_ir(&mut self, frame: &mut ComptimeStackFrame, ir: &ir::IR) -> (Value, Type) {
-        let (body, typ) = self.eval_ir(frame, ir, true);
-
-        let value = match body.node {
+    fn assert_const_value(&mut self, ir: ir::IR) -> Value {
+        match ir.node {
             ir::Node::Nop => Value::None,
             ir::Node::Constant(value) => value,
-            result => panic!("Could not fully eval IR {:?}, got {:?}", ir, result)
-        };
-
-        if typ == Type::Any {
-            todo!("Support specializing Any types");
+            result => panic!("Could not fully eval IR, got {:?}", result)
         }
-
-        (value, typ)
     }
 
     fn eval_ir(
@@ -185,9 +178,18 @@ impl <'a> Interpreter<'a> {
                 (ir, *frame.param_types.get(param_ref).expect("Missing param type"))
             }
             ir::Node::LocalRef(local_ref) => {
-                let ir = if local_ref.comptime {
-                    todo!("Resolve local value as constant");
-                    todo!("Support specializing Any types");
+                let frame_type = frame.local_types.get(local_ref)
+                    .expect("Used local before assignment");
+
+                let ir = if frame_type.comptime {
+                    if frame_type.typ == Type::Any {
+                        todo!("Support specializing Any types");
+                    }
+
+                    let value = frame.comptime_local_values.get(local_ref)
+                        .expect("Used local before assignment");
+
+                    ir::Node::Constant(value.clone())
                 } else {
                     ir::Node::LocalRef(*local_ref)
                 };
@@ -208,8 +210,15 @@ impl <'a> Interpreter<'a> {
                 let (value, typ) = self.eval_ir(frame, value_ir, local_ref.comptime);
 
                 let ir = if local_ref.comptime {
-                    todo!("Resolve local_set during comptime");
-                    todo!("Support specializing Any types");
+                    if typ == Type::Any {
+                        todo!("Support specializing Any types");
+                    }
+
+                    let value = self.assert_const_value(value);
+
+                    frame.comptime_local_values.insert(*local_ref, value);
+
+                    ir::Node::Nop
                 } else {
                     ir::Node::LocalSet(*local_ref, Box::new(value))
                 };
@@ -239,11 +248,12 @@ impl <'a> Interpreter<'a> {
                 }
             }
             ir::Node::Comptime(ir) => {
-                let (result_ir, result_typ) = self.eval_comptime_ir(frame, ir);
+                let (result_ir, result_typ) = self.eval_ir(frame, ir, true);
+                let value = self.assert_const_value(result_ir);
 
                 // Doing this because of the location & to make sure we checked that it's fully
                 // evaluated
-                (ir::Node::Constant(result_ir), result_typ)
+                (ir::Node::Constant(value), result_typ)
             },
             ir::Node::DynamicCall(name, target, args) => {
                 todo!("Eval argument types, lookup function based on target name, specialize it")

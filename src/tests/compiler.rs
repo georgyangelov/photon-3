@@ -17,6 +17,15 @@ fn test_locals() {
     "), 42);
 }
 
+#[test]
+fn test_comptime_vals() {
+    assert_eq!(run::<i64>("
+        @val a = 42
+
+        a
+    "), 42)
+}
+
 fn run<T>(code: &str) -> T {
     let globals = Globals::new();
 
