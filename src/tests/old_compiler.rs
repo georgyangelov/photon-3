@@ -1,7 +1,7 @@
 use std::time::Instant;
-use crate::{ast, lir, mir};
+use crate::{ast, old_lir, mir};
 use crate::old_compiler::llvm;
-use crate::lir::Globals;
+use crate::old_lir::Globals;
 
 #[test]
 fn test_literals() {
@@ -197,11 +197,11 @@ fn run<T>(code: &str) -> T {
     // println!("Comptime MIR: {:?}", mir_module.comptime_main);
 
     let instant = Instant::now();
-    let comptime_state = lir::CompileTimeInterpreter::new(&globals, &mir_module).eval();
+    let comptime_state = old_lir::CompileTimeInterpreter::new(&globals, &mir_module).eval();
     println!("Comptime interpret time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     let instant = Instant::now();
-    let lir_module = lir::Compiler::compile(&globals, &mir_module, comptime_state);
+    let lir_module = old_lir::Compiler::compile(&globals, &mir_module, comptime_state);
     println!("LIR compile time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     let instant = Instant::now();

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::rc::Rc;
-use crate::lir::compile_time_state::ResolvedFn::Intrinsic;
-use crate::lir::{Function, FunctionRef, Value};
+use crate::old_lir::compile_time_state::ResolvedFn::Intrinsic;
+use crate::old_lir::{Function, FunctionRef, Value};
 use crate::mir;
 use crate::types::{IntrinsicFn, Type};
 use crate::types::IntrinsicFn::AddInt;

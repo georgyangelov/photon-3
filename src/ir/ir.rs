@@ -1,69 +1,36 @@
-use crate::vec_map::VecMap;
 use crate::ast;
-use crate::ir::{IntrinsicFn, Type, Value};
+use crate::ir::Value;
 
 #[derive(Debug)]
-pub struct PreComptimeModule {
-    pub functions: Vec<TFunction>,
-    pub main: TFunction
+pub struct Module {
+    pub functions: Vec<Function>,
+    pub main: Function
 }
 
 #[derive(Debug)]
-pub struct PostComptimeModule {
-    // TODO: Make sure that these are only functions used at runtime
-    pub functions: Vec<RFunction>,
-    pub main: RFunction
-}
-
-#[derive(Debug)]
-pub struct TFunction {
-    pub captures: VecMap<CaptureRef, TCapture>,
-    pub params: VecMap<ParamRef, TParam>,
-    pub locals: VecMap<LocalRef, TLocal>,
+pub struct Function {
+    pub captures: Vec<Capture>,
+    pub params: Vec<Param>,
+    pub locals: Vec<Local>,
     pub return_type: Option<IR>,
     pub body: IR
 }
 
-#[derive(Debug)]
-pub struct RFunction {
-    pub captures: VecMap<CaptureRef, RCapture>,
-    pub params: VecMap<ParamRef, RParam>,
-    pub locals: VecMap<LocalRef, RLocal>,
-    pub return_type: Type,
-    pub body: IR
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TCapture {
+pub struct Capture {
     pub from: CaptureFrom,
     pub comptime: bool
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RCapture {
-    pub from: CaptureFrom,
-    pub typ: Type
-}
-
 #[derive(Debug)]
-pub struct TParam {
+pub struct Param {
     pub typ: Option<Box<IR>>,
     pub comptime: bool
 }
 
-#[derive(Debug)]
-pub struct RParam {
-    pub typ: Type
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TLocal {
+pub struct Local {
     pub comptime: bool
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RLocal {
-    pub typ: Type
 }
 
 #[derive(Debug)]
@@ -88,12 +55,8 @@ pub enum Node {
     Block(Vec<IR>),
     Comptime(Box<IR>),
 
-    DynamicCall(Box<str>, Box<IR>, Vec<IR>),
-    DynamicCreateClosure(FunctionTemplateRef, VecMap<CaptureRef, CaptureFrom>),
-
-    StaticCallIntrinsic(IntrinsicFn, Vec<IR>),
-    StaticCall(FunctionRef, Vec<IR>),
-    // StaticCreateClosure(FunctionRef, Vec<CaptureFrom>),
+    Call(Box<str>, Box<IR>, Vec<IR>),
+    CreateClosure(FunctionTemplateRef, Vec<CaptureFrom>),
 
     If(Box<IR>, Box<IR>, Option<Box<IR>>)
 }

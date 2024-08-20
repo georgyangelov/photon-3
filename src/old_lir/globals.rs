@@ -1,4 +1,4 @@
-use crate::lir::Value;
+use crate::old_lir::Value;
 use crate::types::Type;
 
 pub struct Globals {

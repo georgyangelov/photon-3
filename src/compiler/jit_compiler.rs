@@ -11,7 +11,7 @@ use llvm_sys::target_machine::*;
 use llvm_sys::transforms::pass_builder::*;
 use crate::compiler::c_str;
 use crate::compiler::compiler::Compiler;
-use crate::ir;
+use crate::{ir, lir};
 
 pub struct JITCompiler {
     thread_safe_context: LLVMOrcThreadSafeContextRef,
@@ -55,11 +55,11 @@ impl JITCompiler {
         }
     }
 
-    pub fn compile<T>(&mut self, ir_module: &ir::PostComptimeModule) -> unsafe extern "C" fn() -> T {
+    pub fn compile<T>(&mut self, lir_module: &lir::Module) -> unsafe extern "C" fn() -> T {
         Compiler::compile(
             self.context,
             self.module,
-            ir_module
+            lir_module
         );
 
         unsafe {

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use crate::mir;
-use crate::lir::*;
-use crate::lir::compile_time_state::{CompileTimeState, CompilingFunction, ResolvedFn};
-use crate::lir::Instruction::Return;
+use crate::old_lir::*;
+use crate::old_lir::compile_time_state::{CompileTimeState, CompilingFunction, ResolvedFn};
+use crate::old_lir::Instruction::Return;
 use crate::mir::ComptimeExportRef;
 use crate::mir::lexical_scope::CaptureFrom;
 use crate::types::{Type, IntrinsicFn, FunctionSignature};

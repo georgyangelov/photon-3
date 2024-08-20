@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use crate::lir;
+use crate::old_lir;
 use crate::types::Type;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -11,7 +11,7 @@ pub enum Value {
     Type(Type),
 
     // PERFORMANCE: Potential to optimize performance by packing this?
-    Closure(lir::FunctionRef, Rc<Vec<Value>>)
+    Closure(old_lir::FunctionRef, Rc<Vec<Value>>)
 }
 
 impl Value {
@@ -50,7 +50,7 @@ impl Value {
         }
     }
 
-    pub fn assert_closure(&self) -> (lir::FunctionRef, &Vec<Value>) {
+    pub fn assert_closure(&self) -> (old_lir::FunctionRef, &Vec<Value>) {
         match self {
             Value::Closure(func_ref, value) => (*func_ref, value.as_ref()),
             _ => panic!("Invalid value: expected Closure, got {:?}", self)

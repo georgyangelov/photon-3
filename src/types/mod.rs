@@ -1,4 +1,4 @@
-use crate::lir;
+use crate::old_lir;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Type {
@@ -10,7 +10,7 @@ pub enum Type {
     Type,
 
     // TODO: We'll also need an interface type for functions which the closures can be assigned to
-    Closure(lir::FunctionRef)
+    Closure(old_lir::FunctionRef)
 
     // TODO
     // Struct(ArenaRef<StructType>),

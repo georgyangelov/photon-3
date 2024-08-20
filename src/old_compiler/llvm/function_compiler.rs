@@ -3,7 +3,7 @@ use llvm_sys::prelude::*;
 use llvm_sys::core::*;
 use crate::old_compiler::llvm::compiler_module_context::{CompilerModuleContext, FunctionDeclaration};
 use crate::old_compiler::llvm::symbol_name_counter::SymbolNameCounter;
-use crate::lir;
+use crate::old_lir;
 use crate::types::IntrinsicFn;
 
 pub struct FunctionCompiler<'a> {
@@ -15,14 +15,14 @@ pub struct FunctionCompiler<'a> {
 
     c: &'a mut CompilerModuleContext,
 
-    lir_module: &'a lir::Module
+    lir_module: &'a old_lir::Module
 }
 
 impl <'a> FunctionCompiler<'a> {
     pub unsafe fn compile(
         c: &'a mut CompilerModuleContext,
-        lir_module: &'a lir::Module,
-        func: &'a lir::Function,
+        lir_module: &'a old_lir::Module,
+        func: &'a old_lir::Function,
         decl: &'a FunctionDeclaration
     ) {
         let mut local_refs = Vec::new();
@@ -43,7 +43,7 @@ impl <'a> FunctionCompiler<'a> {
         function_builder.compile_basic_block(&func.entry, "entry");
     }
 
-    unsafe fn compile_basic_block(&mut self, lir_basic_block: &lir::BasicBlock, name: &str) -> LLVMBasicBlockRef {
+    unsafe fn compile_basic_block(&mut self, lir_basic_block: &old_lir::BasicBlock, name: &str) -> LLVMBasicBlockRef {
         let name = CString::new(name).unwrap();
         let llvm_basic_block = LLVMAppendBasicBlockInContext(self.c.context, self.decl.func_ref, name.as_ptr());
         let builder = LLVMCreateBuilderInContext(self.c.context);
@@ -51,17 +51,17 @@ impl <'a> FunctionCompiler<'a> {
 
         for instruction in &lir_basic_block.code {
             match instruction {
-                lir::Instruction::LocalSet(local_ref, value_ref, _) => {
+                old_lir::Instruction::LocalSet(local_ref, value_ref, _) => {
                     let value_ref = self.llvm_value_ref_of(builder, *value_ref);
 
                     self.local_refs[local_ref.i] = Some(value_ref);
                 }
 
-                lir::Instruction::CompileTimeSet(_, _, _) => panic!("Cannot compile CompileTimeSet"),
+                old_lir::Instruction::CompileTimeSet(_, _, _) => panic!("Cannot compile CompileTimeSet"),
 
-                lir::Instruction::CreateDynamicClosure(_, _, _, _) => panic!("Cannot compile CreateDynamicClosure"),
+                old_lir::Instruction::CreateDynamicClosure(_, _, _, _) => panic!("Cannot compile CreateDynamicClosure"),
 
-                lir::Instruction::CreateClosure(local_ref, func_ref, value_refs) => {
+                old_lir::Instruction::CreateClosure(local_ref, func_ref, value_refs) => {
                     let func_decl = &self.c.function_declarations[func_ref.i];
 
                     let result_ref = match func_decl.closure_struct_type {
@@ -69,7 +69,7 @@ impl <'a> FunctionCompiler<'a> {
                             // No captures, we just need to generate some value -> doesn't matter which
                             assert!(value_refs.is_empty());
 
-                            self.const_lir_value(&lir::Value::None)
+                            self.const_lir_value(&old_lir::Value::None)
                         }
 
                         Some(closure_struct_type) => {
@@ -82,9 +82,9 @@ impl <'a> FunctionCompiler<'a> {
                     self.local_refs[local_ref.i] = Some(result_ref);
                 }
 
-                lir::Instruction::CallDynamicFunction(_, _, _) => panic!("Cannot compile dynamic function calls"),
+                old_lir::Instruction::CallDynamicFunction(_, _, _) => panic!("Cannot compile dynamic function calls"),
 
-                lir::Instruction::CallIntrinsicFunction(local_ref, intrinsic_fn, arg_refs, _) => {
+                old_lir::Instruction::CallIntrinsicFunction(local_ref, intrinsic_fn, arg_refs, _) => {
                     let args = self.llvm_value_refs_of(builder, arg_refs);
                     let name = self.stmt_name_gen.next("result");
 
@@ -95,7 +95,7 @@ impl <'a> FunctionCompiler<'a> {
                     self.local_refs[local_ref.i] = Some(result_ref);
                 }
 
-                lir::Instruction::CallStaticClosureFunction(local_ref, func_ref, closure_ref, arg_refs, _) => {
+                old_lir::Instruction::CallStaticClosureFunction(local_ref, func_ref, closure_ref, arg_refs, _) => {
                     let mut args = Vec::with_capacity(arg_refs.len() + 1);
                     for lir_value_ref in arg_refs {
                         args.push(self.llvm_value_ref_of(builder, *lir_value_ref));
@@ -120,7 +120,7 @@ impl <'a> FunctionCompiler<'a> {
                     self.local_refs[local_ref.i] = Some(result_ref);
                 }
 
-                lir::Instruction::CallStaticFunction(local_ref, func_ref, arg_refs, _) => {
+                old_lir::Instruction::CallStaticFunction(local_ref, func_ref, arg_refs, _) => {
                     let mut args = self.llvm_value_refs_of(builder, arg_refs);
                     let func_decl = &self.c.function_declarations[func_ref.i];
 
@@ -139,16 +139,16 @@ impl <'a> FunctionCompiler<'a> {
                     self.local_refs[local_ref.i] = Some(result_ref);
                 }
 
-                lir::Instruction::CallPtrFunction(_, _, _, _) => todo!("Support compiling CallPtrFunction"),
-                lir::Instruction::CallPtrClosureFunction(_, _, _, _, _) => todo!("Support compiling CallPtrClosureFunction"),
+                old_lir::Instruction::CallPtrFunction(_, _, _, _) => todo!("Support compiling CallPtrFunction"),
+                old_lir::Instruction::CallPtrClosureFunction(_, _, _, _, _) => todo!("Support compiling CallPtrClosureFunction"),
 
-                lir::Instruction::Return(value_ref, _) => {
+                old_lir::Instruction::Return(value_ref, _) => {
                     let value_ref = self.llvm_value_ref_of(builder, *value_ref);
 
                     LLVMBuildRet(builder, value_ref);
                 }
 
-                lir::Instruction::If(_, _, _, _) => {}
+                old_lir::Instruction::If(_, _, _, _) => {}
             }
         }
 
@@ -206,7 +206,7 @@ impl <'a> FunctionCompiler<'a> {
         )
     }
 
-    unsafe fn llvm_value_refs_of(&mut self, builder: LLVMBuilderRef, lir_value_refs: &[lir::ValueRef]) -> Vec<LLVMValueRef> {
+    unsafe fn llvm_value_refs_of(&mut self, builder: LLVMBuilderRef, lir_value_refs: &[old_lir::ValueRef]) -> Vec<LLVMValueRef> {
         let mut result = Vec::with_capacity(lir_value_refs.len());
 
         for lir_value_ref in lir_value_refs {
@@ -216,16 +216,16 @@ impl <'a> FunctionCompiler<'a> {
         result
     }
 
-    unsafe fn llvm_value_ref_of(&mut self, builder: LLVMBuilderRef, lir_value_ref: lir::ValueRef) -> LLVMValueRef {
+    unsafe fn llvm_value_ref_of(&mut self, builder: LLVMBuilderRef, lir_value_ref: old_lir::ValueRef) -> LLVMValueRef {
         match lir_value_ref {
-            lir::ValueRef::None => self.const_lir_value(&lir::Value::None),
-            lir::ValueRef::Bool(value) => self.const_lir_value(&lir::Value::Bool(value)),
-            lir::ValueRef::Int(value) => self.const_lir_value(&lir::Value::Int(value)),
-            lir::ValueRef::Float(_) => todo!("Support float consts"),
-            lir::ValueRef::Global(_) => todo!("Support globals"),
-            lir::ValueRef::ComptimeExport(_) => todo!("Support comptime exports"),
-            lir::ValueRef::Const(const_ref) => self.const_lir_value(&self.lir_module.constants[const_ref.i]),
-            lir::ValueRef::Capture(capture_ref) => {
+            old_lir::ValueRef::None => self.const_lir_value(&old_lir::Value::None),
+            old_lir::ValueRef::Bool(value) => self.const_lir_value(&old_lir::Value::Bool(value)),
+            old_lir::ValueRef::Int(value) => self.const_lir_value(&old_lir::Value::Int(value)),
+            old_lir::ValueRef::Float(_) => todo!("Support float consts"),
+            old_lir::ValueRef::Global(_) => todo!("Support globals"),
+            old_lir::ValueRef::ComptimeExport(_) => todo!("Support comptime exports"),
+            old_lir::ValueRef::Const(const_ref) => self.const_lir_value(&self.lir_module.constants[const_ref.i]),
+            old_lir::ValueRef::Capture(capture_ref) => {
                 // The last argument is the capture struct
                 let capture_struct_ref = LLVMGetParam(self.decl.func_ref, (self.decl.param_types.len() - 1) as c_uint);
 
@@ -234,21 +234,21 @@ impl <'a> FunctionCompiler<'a> {
 
                 LLVMBuildExtractValue(builder, capture_struct_ref, capture_ref.i as c_uint, name.as_ptr())
             }
-            lir::ValueRef::Param(param_ref) => LLVMGetParam(self.decl.func_ref, param_ref.i as c_uint),
-            lir::ValueRef::Local(local_ref) => self.local_refs[local_ref.i].expect("Local get before set")
+            old_lir::ValueRef::Param(param_ref) => LLVMGetParam(self.decl.func_ref, param_ref.i as c_uint),
+            old_lir::ValueRef::Local(local_ref) => self.local_refs[local_ref.i].expect("Local get before set")
         }
     }
 
-    unsafe fn const_lir_value(&self, lir_value: &lir::Value) -> LLVMValueRef {
+    unsafe fn const_lir_value(&self, lir_value: &old_lir::Value) -> LLVMValueRef {
         match lir_value {
-            lir::Value::None => self.const_u8(0),
-            lir::Value::Bool(value) => self.const_u8(if *value { 1 } else { 0 }),
-            lir::Value::Int(value) => self.const_i64(*value),
-            lir::Value::Float(_) => todo!("Support float consts"),
+            old_lir::Value::None => self.const_u8(0),
+            old_lir::Value::Bool(value) => self.const_u8(if *value { 1 } else { 0 }),
+            old_lir::Value::Int(value) => self.const_i64(*value),
+            old_lir::Value::Float(_) => todo!("Support float consts"),
 
             // TODO: Type error instead of panic
-            lir::Value::Type(_) => panic!("Cannot export Type to runtime as it's not serializable"),
-            lir::Value::Closure(_, _) => todo!("Serialize closure")
+            old_lir::Value::Type(_) => panic!("Cannot export Type to runtime as it's not serializable"),
+            old_lir::Value::Closure(_, _) => todo!("Serialize closure")
         }
     }
 

@@ -2,7 +2,7 @@ use crate::mir;
 use crate::mir::lexical_scope::*;
 use crate::ast;
 use std::borrow::Borrow;
-use crate::lir::Globals;
+use crate::old_lir::Globals;
 
 #[derive(Debug)]
 pub enum CompileError {}

@@ -2,7 +2,7 @@ use std::ffi::{c_uint, CString};
 use llvm_sys::core::*;
 use llvm_sys::LLVMLinkage;
 use llvm_sys::prelude::*;
-use crate::lir;
+use crate::old_lir;
 use crate::types::Type;
 
 pub struct CompilerModuleContext {
@@ -33,7 +33,7 @@ impl CompilerModuleContext {
         }
     }
 
-    pub unsafe fn declare_functions(&mut self, module: &lir::Module) {
+    pub unsafe fn declare_functions(&mut self, module: &old_lir::Module) {
         let mut declarations = Vec::with_capacity(module.functions.len() + 1);
 
         for (i, func) in module.functions.iter().enumerate() {
@@ -54,19 +54,19 @@ impl CompilerModuleContext {
         self.function_declarations = declarations;
     }
 
-    pub unsafe fn declare_main(&mut self, module: &lir::Module) -> FunctionDeclaration {
+    pub unsafe fn declare_main(&mut self, module: &old_lir::Module) -> FunctionDeclaration {
         self.function_declaration(module, &module.main, "main", true)
     }
 
     unsafe fn function_declaration(
         &mut self,
-        module: &lir::Module,
-        func: &lir::Function,
+        module: &old_lir::Module,
+        func: &old_lir::Function,
 
-        // TODO: Use the name from the lir::Function
+        // TODO: Use the name from the old_lir::Function
         name: &str,
 
-        // TODO: Define this in lir::Function
+        // TODO: Define this in old_lir::Function
         exported: bool
     ) -> FunctionDeclaration {
         let closure_struct_type = if func.capture_types.len() > 0 {
@@ -122,7 +122,7 @@ impl CompilerModuleContext {
         }
     }
 
-    pub unsafe fn llvm_type_of(&mut self, module: &lir::Module, typ: Type) -> LLVMTypeRef {
+    pub unsafe fn llvm_type_of(&mut self, module: &old_lir::Module, typ: Type) -> LLVMTypeRef {
         match typ {
             Type::Any => panic!("Cannot represent Any type in runtime-compiled code"),
 
@@ -145,8 +145,8 @@ impl CompilerModuleContext {
 
     unsafe fn llvm_closure_struct_type(
         &mut self,
-        module: &lir::Module,
-        func: &lir::Function
+        module: &old_lir::Module,
+        func: &old_lir::Function
     ) -> LLVMTypeRef {
         if func.capture_types.len() == 0 {
             // TODO: Represent this using `void`

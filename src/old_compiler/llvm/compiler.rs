@@ -11,11 +11,11 @@ use llvm_sys::transforms::pass_builder::*;
 use crate::old_compiler::llvm::c_str;
 use crate::old_compiler::llvm::compiler_module_context::CompilerModuleContext;
 use crate::old_compiler::llvm::function_compiler::FunctionCompiler;
-use crate::lir;
+use crate::old_lir;
 
 pub struct JITCompiler<'a> {
-    lir_module: &'a lir::Module,
-    main_fn: &'a lir::Function,
+    lir_module: &'a old_lir::Module,
+    main_fn: &'a old_lir::Function,
 
     thread_safe_context: LLVMOrcThreadSafeContextRef,
     context: CompilerModuleContext,
@@ -32,7 +32,7 @@ pub struct JITCompiler<'a> {
 // }
 
 impl <'a> JITCompiler<'a> {
-    pub fn new(lir_module: &'a lir::Module) -> Self {
+    pub fn new(lir_module: &'a old_lir::Module) -> Self {
         unsafe {
             LLVM_InitializeNativeTarget();
             LLVM_InitializeNativeAsmPrinter();
