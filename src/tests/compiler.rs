@@ -1,5 +1,5 @@
 use std::time::Instant;
-use crate::{ast, compiler, ir};
+use crate::{ast, compiler, ir, lir};
 use crate::ir::Globals;
 
 #[test]
@@ -36,7 +36,7 @@ fn test_add() {
     "), 42);
 }
 
-fn run<T>(code: &str) -> T {
+fn run<T: From<ir::Value>>(code: &str) -> T {
     let globals = Globals::new();
 
     let instant = Instant::now();
@@ -53,14 +53,19 @@ fn run<T>(code: &str) -> T {
     println!("Comptime interpret time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     let instant = Instant::now();
-    let mut jit_compiler = compiler::JITCompiler::new();
+    let interpreter = lir::Interpreter::new(&globals, &module.functions);
+    let result_value = interpreter.eval_call(module.main, vec![], vec![]);
+    let result = result_value.into();
+    println!("Interpret time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
-    let main_fn = jit_compiler.compile(&module);
-    println!("LLVM compile time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
-
-    let instant = Instant::now();
-    let result = unsafe { main_fn() };
-    println!("Run time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
+    // let instant = Instant::now();
+    // let mut jit_compiler = compiler::JITCompiler::new();
+    // let main_fn = jit_compiler.compile(&module);
+    // println!("LLVM compile time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
+    //
+    // let instant = Instant::now();
+    // let result = unsafe { main_fn() };
+    // println!("Run time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 
     result
 }

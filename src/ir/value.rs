@@ -68,3 +68,15 @@ impl Value {
         }
     }
 }
+
+impl From<Value> for i64 {
+    fn from(value: Value) -> Self { value.assert_int() }
+}
+
+impl From<Value> for bool {
+    fn from(value: Value) -> Self { value.assert_bool() }
+}
+
+impl From<Value> for f64 {
+    fn from(value: Value) -> Self { value.assert_float() }
+}

@@ -1,4 +1,4 @@
-use crate::ir::{Globals, Value};
+use crate::ir::{Globals, IntrinsicFn, Value};
 use crate::lir;
 use crate::lir::{BasicBlock, Instruction, ValueRef};
 
@@ -15,6 +15,10 @@ pub struct StackFrame {
 }
 
 impl <'a> Interpreter<'a> {
+    pub fn new(globals: &'a Globals, functions: &'a [lir::Function]) -> Self {
+        Self { globals, functions }
+    }
+
     pub fn eval_call(&self, func: lir::Function, params: Vec<Value>, captures: Vec<Value>) -> Value {
         let mut locals = Vec::new();
         locals.resize(func.local_count, Value::None);
@@ -32,7 +36,15 @@ impl <'a> Interpreter<'a> {
 
                     frame.locals[local_ref.i] = value;
                 }
-                Instruction::CallIntrinsic(local_ref, func, args) => todo!("Support intrinsic calls"),
+                Instruction::CallIntrinsic(local_ref, func, args) => {
+                    let args = self.resolve_all(frame, args);
+
+                    let result = match func {
+                        IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int())
+                    };
+
+                    frame.locals[local_ref.i] = result;
+                },
                 Instruction::Return(value_ref) => return self.resolve(frame, *value_ref),
                 Instruction::If(_, _, _, _, _) => todo!("Support if")
             }
@@ -51,5 +63,14 @@ impl <'a> Interpreter<'a> {
             ValueRef::Param(param_ref) => frame.params[param_ref.i].clone(),
             ValueRef::Local(local_ref) => frame.locals[local_ref.i].clone()
         }
+    }
+
+    #[inline]
+    fn resolve_all(&self, frame: &StackFrame, value_refs: &[ValueRef]) -> Vec<Value> {
+        let mut result = Vec::with_capacity(value_refs.len());
+        for value_ref in value_refs {
+            result.push(self.resolve(frame, *value_ref));
+        }
+        result
     }
 }
