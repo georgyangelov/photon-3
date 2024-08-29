@@ -123,7 +123,7 @@ impl <'a> Interpreter<'a> {
         };
 
         let mut body = lir::BasicBlock { code: Vec::new() };
-        let (return_ref, body_typ) = self.specialize_ir(&mut stack_frame, &mut body, &func.body);
+        let (return_ref, body_typ) = self.specialize_ir(&mut stack_frame, &mut body, &func.body, false);
 
         let return_type = match return_type {
             None => body_typ,
@@ -158,19 +158,12 @@ impl <'a> Interpreter<'a> {
         }
     }
 
-    fn assert_const_value(&mut self, ir: ir::IR) -> Value {
-        match ir.node {
-            ir::Node::Nop => Value::None,
-            ir::Node::Constant(value) => value,
-            result => panic!("Could not fully eval IR, got {:?}", result)
-        }
-    }
-
     fn specialize_ir(
         &mut self,
         frame: &mut ComptimeStackFrame,
         block: &mut lir::BasicBlock,
-        ir: &ir::IR
+        ir: &ir::IR,
+        comptime: bool
     ) -> (lir::ValueRef, Type) {
         let location = ir.location.clone();
 
@@ -186,6 +179,10 @@ impl <'a> Interpreter<'a> {
                     todo!("Resolve global value as constant");
                     todo!("Support specializing Any types");
                 } else {
+                    if comptime {
+                        todo!("panic")
+                    }
+
                     // ir::Node::GlobalRef(*global_ref)
                     todo!("Support global refs")
                 };
@@ -197,6 +194,10 @@ impl <'a> Interpreter<'a> {
                     todo!("Resolve param value as constant");
                     todo!("Support specializing Any types");
                 } else {
+                    if comptime {
+                        todo!("panic")
+                    }
+
                     let lir_param_ref = *frame.runtime_param_map.get(param_ref).expect("Missing param map");
                     let value_ref = lir::ValueRef::Param(lir_param_ref);
                     let typ = frame.param_types[param_ref.i];
@@ -218,6 +219,10 @@ impl <'a> Interpreter<'a> {
 
                     (Self::value_to_lir(value), value.type_of())
                 } else {
+                    if comptime {
+                        todo!("panic")
+                    }
+
                     let lir_local_ref = *frame.runtime_local_map.get(local_ref).expect("Missing local map");
                     let value_ref = lir::ValueRef::Local(lir_local_ref);
                     let typ = frame.local_types.get(local_ref).expect("Used param before definition").typ;
@@ -227,21 +232,21 @@ impl <'a> Interpreter<'a> {
             }
             ir::Node::CaptureRef(_) => todo!("Support specializing captures"),
             ir::Node::LocalSet(local_ref, value_ir) => {
-                let (value_ref, typ) = self.specialize_ir(frame, block, value_ir);
+                let (value_ref, typ) = self.specialize_ir(frame, block, value_ir, local_ref.comptime);
 
                 if local_ref.comptime {
-                    todo!("Run the specialized IR and evaluate to a Value")
+                    let value = Self::assert_const(value_ref);
 
-                    // if typ == Type::Any {
-                    //     todo!("Support specializing Any types");
-                    // }
-                    //
-                    // let value = self.assert_const_value(value);
-                    //
-                    // frame.local_values.insert(*local_ref, value);
-                    //
-                    // ir::Node::Nop
+                    if typ == Type::Any {
+                        todo!("Support specializing Any types");
+                    }
+
+                    frame.local_values.insert(*local_ref, value);
                 } else {
+                    if comptime {
+                        todo!("panic")
+                    }
+
                     let lir_local_ref = *frame.runtime_local_map.get(local_ref).expect("Missing local map");
                     let instruction = lir::Instruction::LocalSet(lir_local_ref, value_ref, typ);
 
@@ -258,14 +263,18 @@ impl <'a> Interpreter<'a> {
             ir::Node::Block(irs) => {
                 let mut result = (lir::ValueRef::None, Type::None);
                 for ir in irs {
-                    result = self.specialize_ir(frame, block, ir);
+                    result = self.specialize_ir(frame, block, ir, comptime);
                 }
 
                 result
             }
             ir::Node::Comptime(_) => todo!("Support specializing and calling comptime blocks"),
             ir::Node::Call(name, target, args) => {
-                let (target_ref, target_type) = self.specialize_ir(frame, block, target);
+                if comptime {
+                    todo!("Call functions")
+                }
+
+                let (target_ref, target_type) = self.specialize_ir(frame, block, target, comptime);
 
                 let mut arg_types = Vec::with_capacity(args.len() + 1);
                 let mut arg_refs = Vec::with_capacity(args.len() + 1);
@@ -275,7 +284,7 @@ impl <'a> Interpreter<'a> {
                 arg_refs.push(target_ref);
 
                 for arg in args {
-                    let (value_ref, value_type) = self.specialize_ir(frame, block, arg);
+                    let (value_ref, value_type) = self.specialize_ir(frame, block, arg, comptime);
 
                     arg_refs.push(value_ref);
                     arg_types.push(value_type);
@@ -501,6 +510,17 @@ impl <'a> Interpreter<'a> {
     //
     //     (ir::IR { node, location }, typ)
     // }
+
+    fn assert_const(value_ref: lir::ValueRef) -> Value {
+        match value_ref {
+            lir::ValueRef::None => Value::None,
+            lir::ValueRef::Bool(value) => Value::Bool(value),
+            lir::ValueRef::Int(value) => Value::Int(value),
+            lir::ValueRef::Float(value) => Value::Float(value),
+            lir::ValueRef::Param(_) => todo!("Error handling"),
+            lir::ValueRef::Local(_) => todo!("Error handling")
+        }
+    }
 
     fn value_to_lir(value: &Value) -> lir::ValueRef {
         match value {
