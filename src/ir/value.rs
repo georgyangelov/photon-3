@@ -1,17 +1,13 @@
-use std::rc::Rc;
 use crate::ir;
-use crate::ir::r#type::Type;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Value {
     None,
     Bool(bool),
     Int(i64),
     Float(f64),
-    Type(Type),
-
-    // PERFORMANCE: Potential to optimize performance by packing this?
-    Closure(ir::FunctionTemplateRef, Rc<Vec<Value>>)
+    Type(ir::Type),
+    StaticClosure(Vec<Value>)
 }
 
 impl Value {
@@ -43,28 +39,36 @@ impl Value {
         }
     }
 
-    pub fn assert_type(&self) -> Type {
+    pub fn assert_type(&self) -> &ir::Type {
         match self {
-            Value::Type(value) => *value,
+            Value::Type(value) => value,
             _ => panic!("Invalid value: expected Type got {:?}", self)
         }
     }
 
-    pub fn assert_closure(&self) -> (ir::FunctionTemplateRef, &Vec<Value>) {
+    pub fn assert_static_closure(&self) -> &Vec<Value> {
         match self {
-            Value::Closure(func_ref, value) => (*func_ref, value.as_ref()),
+            Value::StaticClosure(value) => value,
             _ => panic!("Invalid value: expected Closure, got {:?}", self)
         }
     }
 
-    pub fn type_of(&self) -> Type {
+    pub fn into_static_closure(self) -> Vec<Value> {
         match self {
-            Value::None => Type::None,
-            Value::Bool(_) => Type::Bool,
-            Value::Int(_) => Type::Int,
-            Value::Float(_) => Type::Float,
-            Value::Type(_) => Type::Type,
-            Value::Closure(func_ref, _) => Type::Closure(*func_ref),
+            Value::StaticClosure(value) => value,
+            _ => panic!("Invalid value: expected Closure, got {:?}", self)
+        }
+    }
+
+    // TODO: Do I need this, is this correct?
+    pub fn type_of(&self) -> ir::Type {
+        match self {
+            Value::None => ir::Type::None,
+            Value::Bool(_) => ir::Type::Bool,
+            Value::Int(_) => ir::Type::Int,
+            Value::Float(_) => ir::Type::Float,
+            Value::Type(_) => ir::Type::Type,
+            Value::StaticClosure(_) => todo!("Cannot get type of a static closure"),
         }
     }
 }

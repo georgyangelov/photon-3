@@ -25,8 +25,9 @@ pub enum Instruction {
     LocalSet(LocalRef, ValueRef, ir::Type),
 
     CallIntrinsic(LocalRef, ir::IntrinsicFn, Vec<ValueRef>),
-    // Call(FunctionRef, Vec<IR>),
-    // CreateClosure(FunctionRef, Vec<CaptureFrom>),
+
+    CreateStaticClosure(LocalRef, Vec<ValueRef>),
+    CallStaticClosure(LocalRef, FunctionRef, ValueRef, Vec<ValueRef>),
 
     Return(ValueRef),
 
@@ -45,6 +46,9 @@ pub enum ValueRef {
     Param(ParamRef),
     Local(LocalRef)
 }
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct FunctionRef { pub i: usize }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ParamRef { pub i: usize }

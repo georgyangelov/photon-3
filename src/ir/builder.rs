@@ -158,17 +158,11 @@ impl Builder {
 
             ast::Value::Function(func) => {
                 let func_ir = self.build_function(scope, func);
-                let func_ref = ir::FunctionTemplateRef { i: self.functions.len() };
-                let captures = func_ir.captures.clone();
+                let func_ref = ir::FunctionRef { i: self.functions.len() };
 
                 self.functions.push(func_ir);
 
-                let mut to_capture = Vec::with_capacity(captures.len());
-                for capture in captures {
-                    to_capture.push(capture.from);
-                }
-
-                ir::Node::CreateClosure(func_ref, to_capture)
+                ir::Node::CreateClosure(func_ref)
             }
 
             ast::Value::Call { name, target, args } => {

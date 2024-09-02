@@ -36,6 +36,15 @@ fn test_add() {
     "), 42);
 }
 
+#[test]
+fn test_fns() {
+    assert_eq!(run::<i64>("
+        val add = (a: Int, b: Int) a + b
+
+        add(1, 41)
+    "), 42);
+}
+
 fn run<T: From<ir::Value>>(code: &str) -> T {
     let globals = Globals::new();
 
@@ -54,7 +63,7 @@ fn run<T: From<ir::Value>>(code: &str) -> T {
 
     let instant = Instant::now();
     let interpreter = lir::Interpreter::new(&globals, &module.functions);
-    let result_value = interpreter.eval_call(module.main, vec![], vec![]);
+    let result_value = interpreter.eval_call(&module.main, vec![], vec![]);
     let result = result_value.into();
     println!("Interpret time: {}ms", instant.elapsed().as_micros() as f64 / 1000f64);
 

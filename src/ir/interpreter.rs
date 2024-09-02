@@ -1,20 +1,26 @@
+use std::rc::Rc;
 use crate::{ir, lir};
-use crate::ir::{Globals, Type, Value};
+use crate::ir::{CaptureFrom, Globals, Type, Value};
 use crate::vec_map::VecMap;
 
 pub struct Interpreter<'a> {
     globals: &'a Globals,
-    functions: Vec<lir::Function>
+
+    // This is Rc because while specializing (referencing) a function from here, we also need
+    // to hold a mutable reference to the Interpreter struct.
+    ir_functions: Vec<Rc<ir::Function>>,
+
+    lir_functions: Vec<lir::Function>
 }
 
 struct ComptimeStackFrame {
     // TODO: Optimization for the lookups of these VecMaps here?
     param_types: Vec<Type>,
-    param_values: VecMap<ir::ParamRef, Value>,
+    // param_values: VecMap<ir::ParamRef, Value>,
     runtime_param_map: VecMap<ir::ParamRef, lir::ParamRef>,
 
     capture_types: Vec<Type>,
-    capture_values: VecMap<ir::CaptureRef, Value>,
+    // capture_values: VecMap<ir::CaptureRef, Value>,
 
     local_types: VecMap<ir::LocalRef, StackFrameType>,
     local_values: VecMap<ir::LocalRef, Value>,
@@ -33,17 +39,18 @@ impl <'a> Interpreter<'a> {
     pub fn eval_comptime(globals: &'a Globals, module: ir::Module) -> lir::Module {
         let mut interpreter = Self {
             globals,
-            functions: Vec::new()
+            ir_functions: module.functions.into_iter().map(|func| Rc::new(func)).collect(),
+            lir_functions: Vec::new()
         };
         let main = interpreter.specialize_function(
-            module.main,
+            &module.main,
             Vec::new(),
-            VecMap::new(),
+            // Vec::new(),
             Vec::new(),
-            VecMap::new()
+            // Vec::new()
         );
 
-        lir::Module { main, functions: interpreter.functions }
+        lir::Module { main, functions: interpreter.lir_functions }
     }
 
     fn specialize_function(
@@ -51,13 +58,14 @@ impl <'a> Interpreter<'a> {
 
         // TODO: Pass a closure here instead of raw FunctionTemplate, we need the types for the
         //       specialization
-        func: ir::Function,
+        func: &ir::Function,
 
+        // TODO: A new struct with Type + Option<Value> (for comptime)
         param_types: Vec<Type>,
-        comptime_param_values: VecMap<ir::ParamRef, Value>,
+        // comptime_param_values: Vec<Value>,
 
         capture_types: Vec<Type>,
-        comptime_capture_values: VecMap<ir::CaptureRef, Value>
+        // comptime_capture_values: Vec<Value>
     ) -> lir::Function {
         // TODO: If the function body resolves to a constant - return that constant directly
         //       instead of wrapping in a function?
@@ -90,11 +98,11 @@ impl <'a> Interpreter<'a> {
 
         let mut stack_frame = ComptimeStackFrame {
             param_types,
-            param_values: comptime_param_values,
+            // param_values: comptime_param_values,
             runtime_param_map,
 
             capture_types,
-            capture_values: comptime_capture_values,
+            // capture_values: comptime_capture_values,
 
             local_types: VecMap::new(),
             local_values: VecMap::new(),
@@ -138,14 +146,14 @@ impl <'a> Interpreter<'a> {
         let mut runtime_param_types = Vec::new();
         for (i, param) in func.params.iter().enumerate() {
             if !param.comptime {
-                runtime_param_types.push(stack_frame.param_types[i]);
+                runtime_param_types.push(stack_frame.param_types[i].clone());
             }
         }
 
         let mut runtime_capture_types = Vec::new();
         for (i, capture) in func.captures.iter().enumerate() {
             if !capture.comptime {
-                runtime_capture_types.push(stack_frame.capture_types[i]);
+                runtime_capture_types.push(stack_frame.capture_types[i].clone());
             }
         }
 
@@ -200,7 +208,7 @@ impl <'a> Interpreter<'a> {
 
                     let lir_param_ref = *frame.runtime_param_map.get(param_ref).expect("Missing param map");
                     let value_ref = lir::ValueRef::Param(lir_param_ref);
-                    let typ = frame.param_types[param_ref.i];
+                    let typ = frame.param_types[param_ref.i].clone();
 
                     (value_ref, typ)
                 }
@@ -210,7 +218,7 @@ impl <'a> Interpreter<'a> {
                     .expect("Used local before assignment");
 
                 if frame_type.comptime {
-                    if frame_type.typ == Type::Any {
+                    if frame_type.typ.is_any() {
                         todo!("Support specializing Any types");
                     }
 
@@ -225,7 +233,7 @@ impl <'a> Interpreter<'a> {
 
                     let lir_local_ref = *frame.runtime_local_map.get(local_ref).expect("Missing local map");
                     let value_ref = lir::ValueRef::Local(lir_local_ref);
-                    let typ = frame.local_types.get(local_ref).expect("Used param before definition").typ;
+                    let typ = frame.local_types.get(local_ref).expect("Used param before definition").typ.clone();
 
                     (value_ref, typ)
                 }
@@ -237,7 +245,7 @@ impl <'a> Interpreter<'a> {
                 if local_ref.comptime {
                     let value = Self::assert_const(value_ref);
 
-                    if typ == Type::Any {
+                    if typ.is_any() {
                         todo!("Support specializing Any types");
                     }
 
@@ -248,7 +256,7 @@ impl <'a> Interpreter<'a> {
                     }
 
                     let lir_local_ref = *frame.runtime_local_map.get(local_ref).expect("Missing local map");
-                    let instruction = lir::Instruction::LocalSet(lir_local_ref, value_ref, typ);
+                    let instruction = lir::Instruction::LocalSet(lir_local_ref, value_ref, typ.clone());
 
                     block.code.push(instruction);
                 }
@@ -297,29 +305,120 @@ impl <'a> Interpreter<'a> {
                     (Type::Int, "+") => ResolvedFn::Intrinsic(ir::IntrinsicFn::AddInt),
                     (Type::Float, _) => todo!("Support calling functions on floats"),
                     (Type::Type, _) => todo!("Support calling functions on types"),
-                    (Type::Closure(_), _) => todo!("Support calling functions on closures"),
+                    (Type::StaticClosure(func_ref, capture_types, static_values), "call") => {
+                        let func = self.ir_functions[func_ref.i].clone();
+
+                        // TODO: Organize this better
+                        arg_refs.remove(0);
+                        arg_types.remove(0);
+
+                        // TODO: Same signatures should specialize to the same lir::FunctionRef
+                        let specialized_fn = self.specialize_function(
+                            &func,
+                            // TODO: Remove this clone
+                            arg_types.clone(),
+                            capture_types
+                        );
+
+                        self.lir_functions.push(specialized_fn);
+                        let lir_func_ref = lir::FunctionRef { i: self.lir_functions.len() - 1 };
+
+                        ResolvedFn::Function(lir_func_ref)
+                    }
+
                     (typ, name) => panic!("Cannot find function {} on {:?}", name, typ)
                 };
 
                 let signature = match &resolved_fn {
                     ResolvedFn::Intrinsic(intrinsic) => intrinsic.signature(&arg_types),
-                    ResolvedFn::TFunction(_) => todo!("Support getting signature of TFunctions"),
-                    ResolvedFn::RFunction(_) => todo!("Support getting signature of RFunctions")
+                    ResolvedFn::Function(func_ref) => {
+                        let func = &self.lir_functions[func_ref.i];
+
+                        // TODO: Move this to LIR and make it part of Function
+                        ir::FunctionSignature {
+                            params: func.param_types.clone(),
+                            returns: func.return_type.clone()
+                        }
+                    }
                 };
 
                 let result_local_ref = Self::new_temp_local(frame);
 
                 let instruction = match resolved_fn {
                     ResolvedFn::Intrinsic(intrinsic) => lir::Instruction::CallIntrinsic(result_local_ref, intrinsic, arg_refs),
-                    ResolvedFn::TFunction(_) => todo!("Support calling TFunctions"),
-                    ResolvedFn::RFunction(_) => todo!("Support calling RFunctions")
+                    ResolvedFn::Function(func_ref) => lir::Instruction::CallStaticClosure(result_local_ref, func_ref, target_ref, arg_refs)
                 };
 
                 block.code.push(instruction);
 
                 (lir::ValueRef::Local(result_local_ref), signature.returns)
             }
-            ir::Node::CreateClosure(_, _) => todo!("Support specializing closures"),
+            ir::Node::CreateClosure(func_ref) => {
+                let func = &self.ir_functions[func_ref.i];
+
+                let mut capture_types = Vec::new();
+                let mut runtime_capture_value_refs = Vec::new();
+                let mut comptime_capture_values = Vec::new();
+
+                if func.params.iter().any(|p| p.comptime) && !comptime {
+                    // Do we want to actually support this?
+                    todo!("Cannot create closure with comptime params at runtime")
+                }
+
+                // TODO: Tidy up this code
+                for capture in &func.captures {
+                    match capture.from {
+                        CaptureFrom::Capture(capture_ref) => {
+                            if capture.comptime {
+                                todo!("Support capture of comptime captures")
+                                // let value = match frame.capture_values.get(&capture_ref) {
+                                //     None => panic!("Could not find compile-time capture"),
+                                //     Some(value) => value
+                                // }.clone();
+                                // comptime_capture_values.push(value);
+                            } else {
+                                todo!("Support capture of capture refs")
+                            }
+
+                            let typ = frame.capture_types[capture_ref.i].clone();
+                            capture_types.push(typ);
+                        }
+
+                        CaptureFrom::Param(param_ref) => todo!("Support capture of param refs"),
+
+                        CaptureFrom::Local(local_ref) => {
+                            if capture.comptime {
+                                let value = match frame.local_values.get(&local_ref) {
+                                    None => panic!("Could not find compile-time local"),
+                                    Some(value) => value
+                                }.clone();
+
+                                comptime_capture_values.push(value);
+                            } else {
+                                let value_ref = lir::ValueRef::Local(*frame.runtime_local_map.get(&local_ref).unwrap());
+
+                                runtime_capture_value_refs.push(value_ref);
+                            }
+
+                            let typ = frame.local_types.get(&local_ref)
+                                .expect("Could not find local type for capture")
+                                .typ
+                                .clone();
+
+                            capture_types.push(typ);
+                        }
+                    };
+                    // let value = self.specialize_ir(frame, block, capture)
+                }
+
+                let closure_local_ref = Self::new_temp_local(frame);
+
+                let closure_type = Type::StaticClosure(*func_ref, capture_types, comptime_capture_values);
+                let closure_instr = lir::Instruction::CreateStaticClosure(closure_local_ref, runtime_capture_value_refs);
+                block.code.push(closure_instr);
+
+                (lir::ValueRef::Local(closure_local_ref), closure_type)
+            },
             ir::Node::If(_, _, _) => todo!("Support specializing ifs")
         }
     }
@@ -529,14 +628,13 @@ impl <'a> Interpreter<'a> {
             Value::Int(value) => lir::ValueRef::Int(*value),
             Value::Float(value) => lir::ValueRef::Float(*value),
             Value::Type(_) => todo!("Support referencing types from runtime code?"),
-            Value::Closure(_, _) => todo!("Support closure exports")
+            Value::StaticClosure(_) => todo!("Support closure exports")
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum ResolvedFn {
     Intrinsic(ir::IntrinsicFn),
-    TFunction(ir::FunctionTemplateRef),
-    RFunction(ir::FunctionRef)
+    Function(lir::FunctionRef)
 }

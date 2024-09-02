@@ -77,9 +77,11 @@ impl <'a> FunctionBuilder<'a> {
 
                     LLVMBuildRet(builder, value_ref);
                 }
-                lir::Instruction::If(_, _, _, _, _) => todo!("Support compiling ifs")
+                lir::Instruction::CreateStaticClosure(_, _) => todo!("Support closures"),
+                lir::Instruction::If(_, _, _, _, _) => todo!("Support compiling ifs"),
+                _ => todo!("Support the rest of LIR")
             }
-            }
+        }
 
         LLVMDisposeBuilder(builder);
 
@@ -129,7 +131,7 @@ impl <'a> FunctionBuilder<'a> {
 
             // TODO: Type error instead of panic
             ir::Value::Type(_) => panic!("Cannot export Type to runtime as it's not serializable"),
-            ir::Value::Closure(_, _) => todo!("Serialize closure")
+            ir::Value::StaticClosure(_) => todo!("Serialize closure")
         }
     }
 

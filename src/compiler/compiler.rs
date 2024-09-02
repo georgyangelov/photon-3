@@ -65,14 +65,14 @@ impl <'a> Compiler<'a> {
     unsafe fn declare_function(&mut self, func: &lir::Function, name: &str, exported: bool) -> FunctionDeclaration {
         let mut param_types = Vec::with_capacity(func.param_types.len());
         for lir_param in func.param_types.iter() {
-            param_types.push(self.llvm_type_of(*lir_param));
+            param_types.push(self.llvm_type_of(lir_param));
         }
 
         if func.capture_types.len() > 0 {
             todo!("Support closures");
         }
 
-        let llvm_return_type = self.llvm_type_of(func.return_type);
+        let llvm_return_type = self.llvm_type_of(&func.return_type);
 
         let type_ref = LLVMFunctionType(
             llvm_return_type,
@@ -96,7 +96,7 @@ impl <'a> Compiler<'a> {
         }
     }
 
-    pub unsafe fn llvm_type_of(&mut self, typ: Type) -> LLVMTypeRef {
+    pub unsafe fn llvm_type_of(&mut self, typ: &Type) -> LLVMTypeRef {
         match typ {
             Type::Any => panic!("Cannot represent Any type in runtime-compiled code"),
 
@@ -107,7 +107,7 @@ impl <'a> Compiler<'a> {
             Type::Float => LLVMDoubleTypeInContext(self.llvm_context),
             Type::Type => panic!("Cannot represent Type type in runtime-compiled code"),
 
-            Type::Closure(_) => todo!("Support closures"),
+            Type::StaticClosure(_, _, _) => todo!("Support closures"),
 
             // TODO: We can't use self.function_declarations here since it may not yet be initialized,
             //       since we're using llvm_type_of during initialization

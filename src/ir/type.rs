@@ -1,6 +1,7 @@
 use crate::ir;
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+// TODO: Make this faster by using arena allocation instead of cloning
+#[derive(Clone, Debug)]
 pub enum Type {
     Any,
     None,
@@ -9,12 +10,23 @@ pub enum Type {
     Float,
     Type,
 
+    StaticClosure(ir::FunctionRef, Vec<Type>, Vec<ir::Value>)
+
     // TODO: We'll also need an interface type for functions which the closures can be assigned to
-    Closure(ir::FunctionTemplateRef)
+    // Closure(ir::FunctionRef)
 
     // TODO
     // Struct(ArenaRef<StructType>),
     // Interface(ArenaRef<InterfaceType>)
+}
+
+impl Type {
+    pub fn is_any(&self) -> bool {
+        match self {
+            Type::Any => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -30,7 +42,7 @@ pub struct FunctionSignature {
 
 // PERFORMANCE: Optimize to not create new objects every time
 impl IntrinsicFn {
-    pub fn signature(&self, _arg_types: &[Type]) -> FunctionSignature {
+    pub fn signature(&self, arg_types: &[Type]) -> FunctionSignature {
         match self {
             IntrinsicFn::AddInt => FunctionSignature { params: vec![Type::Int, Type::Int], returns: Type::Int }
         }

@@ -19,7 +19,7 @@ impl <'a> Interpreter<'a> {
         Self { globals, functions }
     }
 
-    pub fn eval_call(&self, func: lir::Function, params: Vec<Value>, captures: Vec<Value>) -> Value {
+    pub fn eval_call(&self, func: &lir::Function, params: Vec<Value>, captures: Vec<Value>) -> Value {
         let mut locals = Vec::new();
         locals.resize(func.local_count, Value::None);
 
@@ -36,17 +36,34 @@ impl <'a> Interpreter<'a> {
 
                     frame.locals[local_ref.i] = value;
                 }
-                Instruction::CallIntrinsic(local_ref, func, args) => {
-                    let args = self.resolve_all(frame, args);
+                Instruction::CallIntrinsic(local_ref, func, arg_refs) => {
+                    let args = self.resolve_all(frame, arg_refs);
 
                     let result = match func {
                         IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int())
                     };
 
                     frame.locals[local_ref.i] = result;
-                },
+                }
+
                 Instruction::Return(value_ref) => return self.resolve(frame, *value_ref),
-                Instruction::If(_, _, _, _, _) => todo!("Support if")
+
+                Instruction::CreateStaticClosure(local_ref, capture_refs) => {
+                    let captures = self.resolve_all(frame, capture_refs);
+
+                    frame.locals[local_ref.i] = Value::StaticClosure(captures);
+                }
+                Instruction::CallStaticClosure(local_ref, func_ref, closure_ref, arg_refs) => {
+                    let closure = self.resolve(frame, *closure_ref);
+                    let args = self.resolve_all(frame, arg_refs);
+                    let func = &self.functions[func_ref.i];
+
+                    let result = self.eval_call(func, args, closure.into_static_closure());
+
+                    frame.locals[local_ref.i] = result;
+                }
+
+                Instruction::If(_, _, _, _, _) => todo!("Support if"),
             }
         }
 

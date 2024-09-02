@@ -56,13 +56,10 @@ pub enum Node {
     Comptime(Box<IR>),
 
     Call(Box<str>, Box<IR>, Vec<IR>),
-    CreateClosure(FunctionTemplateRef, Vec<CaptureFrom>),
+    CreateClosure(FunctionRef),
 
     If(Box<IR>, Box<IR>, Option<Box<IR>>)
 }
-
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-pub struct FunctionTemplateRef { pub i: usize }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct FunctionRef { pub i: usize }
