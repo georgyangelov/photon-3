@@ -10,7 +10,7 @@ pub enum Type {
     Float,
     Type,
 
-    StaticClosure(ir::FunctionRef, Vec<Type>, Vec<ir::Value>)
+    StaticClosure(ir::FunctionRef, Vec<StaticCapture>)
 
     // TODO: We'll also need an interface type for functions which the closures can be assigned to
     // Closure(ir::FunctionRef)
@@ -27,6 +27,12 @@ impl Type {
             _ => false
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticCapture {
+    pub typ: Type,
+    pub comptime_value: Option<ir::Value>
 }
 
 #[derive(Debug, Clone, Copy)]

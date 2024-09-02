@@ -107,7 +107,7 @@ impl <'a> Compiler<'a> {
             Type::Float => LLVMDoubleTypeInContext(self.llvm_context),
             Type::Type => panic!("Cannot represent Type type in runtime-compiled code"),
 
-            Type::StaticClosure(_, _, _) => todo!("Support closures"),
+            Type::StaticClosure(_, _) => todo!("Support closures"),
 
             // TODO: We can't use self.function_declarations here since it may not yet be initialized,
             //       since we're using llvm_type_of during initialization

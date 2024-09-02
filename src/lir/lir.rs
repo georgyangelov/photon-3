@@ -51,6 +51,9 @@ pub enum ValueRef {
 pub struct FunctionRef { pub i: usize }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct CaptureRef { pub i: usize }
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ParamRef { pub i: usize }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
