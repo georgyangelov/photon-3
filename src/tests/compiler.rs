@@ -1,5 +1,5 @@
 use std::time::Instant;
-use crate::{ast, compiler, ir, lir};
+use crate::{ast, ir, lir};
 use crate::ir::Globals;
 
 #[test]

@@ -292,20 +292,14 @@ impl <'a> Interpreter<'a> {
                 }
 
                 let (target_ref, target_type) = self.specialize_ir(frame, block, target, comptime);
-
-                let mut arg_types = Vec::with_capacity(args.len() + 1);
-                let mut arg_refs = Vec::with_capacity(args.len() + 1);
-
-                // TODO: Remove this clone
-                arg_types.push(target_type.clone());
-                arg_refs.push(target_ref);
-
-                for arg in args {
-                    let (value_ref, value_type) = self.specialize_ir(frame, block, arg, comptime);
-
-                    arg_refs.push(value_ref);
-                    arg_types.push(value_type);
-                }
+                let (mut arg_refs, mut arg_types) = self.specialize_args_with_target(
+                    frame,
+                    block,
+                    // TODO: Eliminate this clone somehow?
+                    (target_ref, target_type.clone()),
+                    args,
+                    comptime
+                );
 
                 let resolved_fn = match (target_type, name.as_ref()) {
                     (Type::Any, _) => panic!("Target type cannot be Any"),
@@ -317,7 +311,7 @@ impl <'a> Interpreter<'a> {
                     (Type::StaticClosure(func_ref, captures), "call") => {
                         let func = self.ir_functions[func_ref.i].clone();
 
-                        // TODO: Organize this better
+                        // TODO: Make this better
                         arg_refs.remove(0);
                         arg_types.remove(0);
 
@@ -330,11 +324,12 @@ impl <'a> Interpreter<'a> {
                             };
 
                             param_info.push(ParamInfo {
+                                // TODO: Remove this clone
+                                typ: arg_types[i].clone(),
                                 comptime_value,
+
                                 // Will be populated by `specialize_function`
                                 runtime_ref: None,
-                                // TODO: Remove this clone
-                                typ: arg_types[i].clone()
                             })
                         }
 
@@ -460,6 +455,52 @@ impl <'a> Interpreter<'a> {
             },
             ir::Node::If(_, _, _) => todo!("Support specializing ifs")
         }
+    }
+
+    #[inline]
+    fn specialize_args_with_target(
+        &mut self,
+        frame: &mut ComptimeStackFrame,
+        block: &mut lir::BasicBlock,
+        target: (lir::ValueRef, Type),
+        args: &[ir::IR],
+        comptime: bool
+    ) -> (Vec<lir::ValueRef>, Vec<Type>) {
+        let mut refs = Vec::with_capacity(args.len() + 1);
+        let mut types = Vec::with_capacity(args.len() + 1);
+
+        refs.push(target.0);
+        types.push(target.1);
+
+        for arg in args {
+            let (value_ref, value_type) = self.specialize_ir(frame, block, arg, comptime);
+
+            refs.push(value_ref);
+            types.push(value_type);
+        }
+
+        (refs, types)
+    }
+
+    #[inline]
+    fn specialize_args_without_target(
+        &mut self,
+        frame: &mut ComptimeStackFrame,
+        block: &mut lir::BasicBlock,
+        args: &[ir::IR],
+        comptime: bool
+    ) -> (Vec<lir::ValueRef>, Vec<Type>) {
+        let mut refs = Vec::with_capacity(args.len());
+        let mut types = Vec::with_capacity(args.len());
+
+        for arg in args {
+            let (value_ref, value_type) = self.specialize_ir(frame, block, arg, comptime);
+
+            refs.push(value_ref);
+            types.push(value_type);
+        }
+
+        (refs, types)
     }
 
     fn new_temp_local(frame: &mut ComptimeStackFrame) -> lir::LocalRef {
