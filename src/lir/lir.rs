@@ -1,4 +1,5 @@
 use crate::ir;
+use crate::ir::Type;
 
 #[derive(Debug)]
 pub struct Module {
@@ -8,9 +9,7 @@ pub struct Module {
 
 #[derive(Debug)]
 pub struct Function {
-    pub capture_types: Vec<ir::Type>,
-    pub param_types: Vec<ir::Type>,
-    pub return_type: ir::Type,
+    pub signature: FunctionSignature,
     pub local_count: usize,
     pub body: BasicBlock
 }
@@ -22,16 +21,16 @@ pub struct BasicBlock {
 
 #[derive(Debug)]
 pub enum Instruction {
-    LocalSet(LocalRef, ValueRef, ir::Type),
+    LocalSet(LocalRef, ValueRef, Type),
 
-    CallIntrinsic(LocalRef, ir::IntrinsicFn, Vec<ValueRef>),
+    CallIntrinsic(LocalRef, IntrinsicFn, Vec<ValueRef>),
 
     CreateStaticClosure(LocalRef, Vec<ValueRef>),
     CallStaticClosure(LocalRef, FunctionRef, ValueRef, Vec<ValueRef>),
 
     Return(ValueRef),
 
-    If(LocalRef, ValueRef, BasicBlock, BasicBlock, ir::Type)
+    If(LocalRef, ValueRef, BasicBlock, BasicBlock, Type)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -58,3 +57,28 @@ pub struct ParamRef { pub i: usize }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct LocalRef { pub i: usize }
+
+#[derive(Clone, Debug)]
+pub struct FunctionSignature {
+    pub params: Vec<Type>,
+    pub captures: Vec<Type>,
+    pub returns: Type
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum IntrinsicFn {
+    AddInt
+}
+
+// PERFORMANCE: Optimize to not create new objects every time
+impl IntrinsicFn {
+    pub fn signature(&self, _arg_types: &[Type]) -> FunctionSignature {
+        match self {
+            IntrinsicFn::AddInt => FunctionSignature {
+                params: vec![Type::Int, Type::Int],
+                captures: Vec::new(),
+                returns: Type::Int
+            }
+        }
+    }
+}

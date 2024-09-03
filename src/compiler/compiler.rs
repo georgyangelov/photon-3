@@ -63,16 +63,16 @@ impl <'a> Compiler<'a> {
     }
 
     unsafe fn declare_function(&mut self, func: &lir::Function, name: &str, exported: bool) -> FunctionDeclaration {
-        let mut param_types = Vec::with_capacity(func.param_types.len());
-        for lir_param in func.param_types.iter() {
+        let mut param_types = Vec::with_capacity(func.signature.params.len());
+        for lir_param in func.signature.params.iter() {
             param_types.push(self.llvm_type_of(lir_param));
         }
 
-        if func.capture_types.len() > 0 {
+        if func.signature.captures.len() > 0 {
             todo!("Support closures");
         }
 
-        let llvm_return_type = self.llvm_type_of(&func.return_type);
+        let llvm_return_type = self.llvm_type_of(&func.signature.returns);
 
         let type_ref = LLVMFunctionType(
             llvm_return_type,

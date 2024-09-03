@@ -67,7 +67,7 @@ impl <'a> FunctionBuilder<'a> {
                     let name = self.stmt_name_gen.next("result");
 
                     let result_ref = match intrinsic_fn {
-                        ir::IntrinsicFn::AddInt => LLVMBuildAdd(builder, args[0], args[1], name.as_ptr())
+                        lir::IntrinsicFn::AddInt => LLVMBuildAdd(builder, args[0], args[1], name.as_ptr())
                     };
 
                     self.local_refs[local_ref.i] = Some(result_ref);

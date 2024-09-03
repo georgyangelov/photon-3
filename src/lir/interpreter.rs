@@ -1,4 +1,4 @@
-use crate::ir::{Globals, IntrinsicFn, Value};
+use crate::ir::{Globals, Value};
 use crate::lir;
 use crate::lir::{BasicBlock, Instruction, ValueRef};
 
@@ -40,7 +40,7 @@ impl <'a> Interpreter<'a> {
                     let args = self.resolve_all(frame, arg_refs);
 
                     let result = match func {
-                        IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int())
+                        lir::IntrinsicFn::AddInt => Value::Int(args[0].assert_int() + args[1].assert_int())
                     };
 
                     frame.locals[local_ref.i] = result;

@@ -170,9 +170,11 @@ impl <'a> Interpreter<'a> {
             .collect();
 
         lir::Function {
-            capture_types: runtime_capture_types,
-            param_types: runtime_param_types,
-            return_type,
+            signature: lir::FunctionSignature {
+                captures: runtime_capture_types,
+                params: runtime_param_types,
+                returns: return_type
+            },
             local_count: frame.runtime_local_count,
             body
         }
@@ -305,7 +307,7 @@ impl <'a> Interpreter<'a> {
                     (Type::Any, _) => panic!("Target type cannot be Any"),
                     (Type::None, _) => todo!("Support calling functions on None"),
                     (Type::Bool, _) => todo!("Support calling functions on bools"),
-                    (Type::Int, "+") => ResolvedFn::Intrinsic(ir::IntrinsicFn::AddInt),
+                    (Type::Int, "+") => ResolvedFn::Intrinsic(lir::IntrinsicFn::AddInt),
                     (Type::Float, _) => todo!("Support calling functions on floats"),
                     (Type::Type, _) => todo!("Support calling functions on types"),
                     (Type::StaticClosure(func_ref, captures), "call") => {
@@ -363,16 +365,8 @@ impl <'a> Interpreter<'a> {
                 };
 
                 let signature = match &resolved_fn {
-                    ResolvedFn::Intrinsic(intrinsic) => intrinsic.signature(&arg_types),
-                    ResolvedFn::Function(func_ref) => {
-                        let func = &self.lir_functions[func_ref.i];
-
-                        // TODO: Move this to LIR and make it part of Function
-                        ir::FunctionSignature {
-                            params: func.param_types.clone(),
-                            returns: func.return_type.clone()
-                        }
-                    }
+                    ResolvedFn::Intrinsic(intrinsic) => &intrinsic.signature(&arg_types),
+                    ResolvedFn::Function(func_ref) => &self.lir_functions[func_ref.i].signature
                 };
 
                 let result_local_ref = Self::new_temp_local(frame);
@@ -384,7 +378,7 @@ impl <'a> Interpreter<'a> {
 
                 block.code.push(instruction);
 
-                (lir::ValueRef::Local(result_local_ref), signature.returns)
+                (lir::ValueRef::Local(result_local_ref), signature.returns.clone())
             }
             ir::Node::CreateClosure(func_ref) => {
                 let func = &self.ir_functions[func_ref.i];
@@ -535,6 +529,6 @@ impl <'a> Interpreter<'a> {
 
 #[derive(Clone)]
 pub enum ResolvedFn {
-    Intrinsic(ir::IntrinsicFn),
+    Intrinsic(lir::IntrinsicFn),
     Function(lir::FunctionRef)
 }

@@ -34,23 +34,3 @@ pub struct StaticCapture {
     pub typ: Type,
     pub comptime_value: Option<ir::Value>
 }
-
-#[derive(Debug, Clone, Copy)]
-pub enum IntrinsicFn {
-    AddInt
-}
-
-#[derive(Clone, Debug)]
-pub struct FunctionSignature {
-    pub params: Vec<Type>,
-    pub returns: Type
-}
-
-// PERFORMANCE: Optimize to not create new objects every time
-impl IntrinsicFn {
-    pub fn signature(&self, arg_types: &[Type]) -> FunctionSignature {
-        match self {
-            IntrinsicFn::AddInt => FunctionSignature { params: vec![Type::Int, Type::Int], returns: Type::Int }
-        }
-    }
-}
